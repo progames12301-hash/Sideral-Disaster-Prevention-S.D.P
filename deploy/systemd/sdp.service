@@ -1,0 +1,24 @@
+[Unit]
+Description=Sideral Disaster Prevention EEW backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sdp
+Group=sdp
+WorkingDirectory=/opt/sdp
+EnvironmentFile=-/etc/sdp/sdp.env
+ExecStart=/opt/sdp/.venv/bin/uvicorn backend.app:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+KillSignal=SIGINT
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/sdp
+
+[Install]
+WantedBy=multi-user.target
