@@ -31,3 +31,5 @@ services:
         value: 120
       - key: SDP_STATION_FRESH_SECONDS
         value: 45
+      - key: SDP_CATALOG_URL
+        value: https://www.moho.iag.usp.br/fdsnws/event/1/query
