@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111820">
+  <meta name="description" content="S.D.P — monitoramento sísmico experimental em tempo real para o Brasil">
+  <title>S.D.P | Earthquake Early Warning</title>
+  <link rel="manifest" href="./web/manifest.json">
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="./web/style.css">
+</head>
+<body>
+  <div id="app">
+    <aside class="side-panel">
+      <div class="brand-row">
+        <div class="brand-mark">S.D.P</div>
+        <div class="brand-copy">
+          <strong>Sideral Disaster Prevention</strong>
+          <span>Earthquake Early Warning · Brasil</span>
+        </div>
+        <span id="linkStatus" class="status-dot" title="Conexão do painel"></span>
+      </div>
+
+      <div class="alert-strip" id="alertStrip">
+        <span class="alert-kicker">MONITORAMENTO</span>
+        <strong id="alertHeadline">Rede sísmica em observação</strong>
+        <span id="eventTime">Aguardando detecção multiestação</span>
+      </div>
+
+      <section class="event-card" id="eventCard">
+        <div class="event-location">
+          <span class="eyebrow">LOCALIZAÇÃO PRELIMINAR</span>
+          <strong id="eventLocation">Sem evento ativo</strong>
+          <span id="eventCoordinates">—</span>
+          <span id="eewMode" class="eew-mode">EEW em espera</span>
+        </div>
+
+        <div class="metric metric-primary">
+          <div>
+            <span class="metric-label">MAGNITUDE</span>
+            <small id="magnitudeType">quando confirmada</small>
+          </div>
+          <strong id="magnitudeValue">—</strong>
+        </div>
+
+        <div class="metric metric-secondary">
+          <div>
+            <span class="metric-label">PROFUNDIDADE</span>
+            <small id="eventStatus">detecção automática</small>
+          </div>
+          <strong><span id="depthValue">—</span><small> km</small></strong>
+        </div>
+
+        <div class="event-details-grid">
+          <div><span>Estações</span><strong id="stationCount">0</strong></div>
+          <div><span>Confiança</span><strong id="confidence">—</strong></div>
+          <div><span>RMS</span><strong id="rmsValue">—</strong></div>
+          <div><span>Incerteza</span><strong id="uncertainty">—</strong></div>
+          <div><span>P / S picks</span><strong id="phaseCount">—</strong></div>
+          <div><span>Latência med.</span><strong id="pickLatency">—</strong></div>
+          <div><span>Gap azim.</span><strong id="azimuthalGap">—</strong></div>
+          <div><span>Revisão</span><strong id="revision">—</strong></div>
+        </div>
+      </section>
+
+      <section class="network-card">
+        <div class="section-title">
+          <span>REDE EM TEMPO REAL</span>
+          <div class="network-head"><small id="medianLatency">latência —</small><strong id="onlineCount">0</strong></div>
+        </div>
+        <div id="sources" class="source-list"></div>
+      </section>
+
+      <section class="target-card">
+        <div class="section-title"><span>PONTO DE INTERESSE</span></div>
+        <div class="target-actions">
+          <button id="locateMe" type="button">Usar minha localização</button>
+          <button id="clearTarget" type="button" class="ghost">Limpar</button>
+        </div>
+        <p id="targetText">Clique no mapa para calcular a chegada estimada das ondas P e S.</p>
+        <div class="eta-grid">
+          <div><span>ONDA P</span><strong id="pEta">—</strong></div>
+          <div><span>ONDA S</span><strong id="sEta">—</strong></div>
+        </div>
+      </section>
+
+      <section class="history-card">
+        <div class="section-title"><span>HISTÓRICO RECENTE</span><span id="historyCount">0 eventos</span></div>
+        <div id="historyList" class="history-list">
+          <div class="empty-state">Nenhum evento recebido ainda.</div>
+        </div>
+      </section>
+
+      <p class="disclaimer">
+        Sistema experimental e não oficial. Não substitui comunicados da RSBR, USP/IAG, Observatório Nacional, UnB, UFRN ou Defesa Civil.
+      </p>
+    </aside>
+
+    <main class="map-shell">
+      <div id="map"></div>
+      <div class="top-clock">
+        <span id="utcClock">--:--:-- UTC</span>
+        <small id="lastUpdate">iniciando</small>
+      </div>
+      <div class="map-tools">
+        <button id="fitBrazil" type="button" title="Voltar ao Brasil">BR</button>
+        <button id="toggleStations" type="button" class="active" title="Mostrar/ocultar estações">●</button>
+      </div>
+      <div class="wave-legend">
+        <span><i class="p-wave"></i> Onda P</span>
+        <span><i class="s-wave"></i> Onda S</span>
+        <span><i class="epicenter-dot"></i> Epicentro</span>
+      </div>
+      <div id="mapNotice" class="map-notice">Carregando metadados das estações…</div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="./web/app.js"></script>
+</body>
+</html>
