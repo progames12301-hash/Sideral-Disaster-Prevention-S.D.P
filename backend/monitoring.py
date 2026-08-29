@@ -16,3 +16,4 @@ class NetworkWatchdog(threading.Thread):
     def run(self) -> None:
         while not self.stop_event.wait(5.0):
             self.state.expire_stale_stations(self.settings.station_fresh_seconds)
+            self.state.expire_current_event(self.settings.active_event_seconds)
