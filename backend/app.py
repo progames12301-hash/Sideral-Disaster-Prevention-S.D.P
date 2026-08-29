@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.catalog import CatalogWatcher
 from backend.config import settings
+from backend.monitoring import NetworkWatchdog
 from backend.seismic.detection import WaveformProcessor
 from backend.seismic.ml_picker import PhaseNetStreamingPicker
 from backend.seismic.seedlink import SeedLinkCollector
@@ -22,7 +23,7 @@ from backend.state import SystemState, utc_iso
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = BASE_DIR / "web"
-state = SystemState()
+state = SystemState(latency_history_size=settings.latency_history_size)
 stop_event = threading.Event()
 collectors: list[SeedLinkCollector] = []
 clients: set[WebSocket] = set()
@@ -114,11 +115,13 @@ def bootstrap_streaming() -> None:
             state=state,
             on_trace=ingest,
             stop_event=stop_event,
+            stall_seconds=settings.seedlink_stall_seconds,
         )
         collectors.append(collector)
         collector.start()
 
     CatalogWatcher(settings, state, stop_event).start()
+    NetworkWatchdog(settings, state, stop_event).start()
 
 
 @asynccontextmanager
@@ -132,7 +135,7 @@ async def lifespan(app: FastAPI):
     task.cancel()
 
 
-app = FastAPI(title="Sideral Disaster Prevention — S.D.P", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="Sideral Disaster Prevention — S.D.P", version="0.3.0", lifespan=lifespan)
 
 
 @app.get("/api/health")
@@ -142,7 +145,7 @@ def health() -> dict:
     streaming = [s for s in enabled if s.get("state") == "streaming"]
     return {
         "ok": True,
-        "version": "0.2.0",
+        "version": "0.3.0",
         "time": utc_iso(),
         "enabledSources": len(enabled),
         "streamingSources": len(streaming),
@@ -153,11 +156,40 @@ def health() -> dict:
     }
 
 
+@app.get("/api/live")
+def live() -> dict:
+    return {"ok": True, "version": "0.3.0", "time": utc_iso()}
+
+
+@app.get("/api/ready")
+def ready():
+    snapshot = state.snapshot()
+    report = state.latency_report(settings.eew_max_pick_latency_seconds, settings.station_fresh_seconds)
+    enabled = [s for s in snapshot["sources"] if s.get("state") != "disabled" and s.get("key") != "ml_picker"]
+    streaming = [s for s in enabled if s.get("state") == "streaming"]
+    ready_now = bool(streaming and report["eligibleCount"] >= settings.min_stations)
+    payload = {
+        "ready": ready_now,
+        "streamingSources": len(streaming),
+        "lowLatencyStations": report["eligibleCount"],
+        "requiredStations": settings.min_stations,
+        "time": utc_iso(),
+    }
+    if not ready_now:
+        raise HTTPException(status_code=503, detail=payload)
+    return payload
+
+
+@app.get("/api/network/latency")
+def network_latency() -> dict:
+    return state.latency_report(settings.eew_max_pick_latency_seconds, settings.station_fresh_seconds)
+
+
 @app.get("/api/state")
 def api_state() -> dict:
     payload = state.snapshot()
     payload["config"] = {
-        "version": "0.2.0",
+        "version": "0.3.0",
         "pVelocityKmS": settings.p_velocity_km_s,
         "sVelocityKmS": settings.s_velocity_km_s,
         "minStations": settings.min_stations,
@@ -166,6 +198,7 @@ def api_state() -> dict:
         "threeComponentStreams": settings.three_component_streams,
         "eewMaxPickLatencySeconds": settings.eew_max_pick_latency_seconds,
         "debugSimulator": settings.debug_simulator,
+        "seedlinkStallSeconds": settings.seedlink_stall_seconds,
     }
     return payload
 
