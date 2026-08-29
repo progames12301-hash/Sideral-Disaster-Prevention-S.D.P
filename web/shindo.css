@@ -1,0 +1,114 @@
+.shindo-panel {
+  grid-column: 1 / -1;
+  margin: 0 8px 8px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 6px;
+  background: rgba(9,18,27,.72);
+  padding: 10px;
+}
+
+.shindo-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 10px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.shindo-head span {
+  color: #9badbc;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
+.shindo-head strong {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  min-width: 42px;
+  text-align: center;
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: -.05em;
+}
+
+.shindo-head small {
+  color: #74899c;
+  font-size: 8px;
+  line-height: 1.25;
+}
+
+.shindo-scale {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.shindo-step {
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  color: #071018;
+  font-size: 12px;
+  font-weight: 950;
+  opacity: .42;
+  transform: translateY(0);
+  transition: .18s ease;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.2);
+}
+
+.shindo-step[data-shindo="1"] { background: #7ec8ff; }
+.shindo-step[data-shindo="2"] { background: #65e5d1; }
+.shindo-step[data-shindo="3"] { background: #a6e65b; }
+.shindo-step[data-shindo="4"] { background: #f1d34e; }
+.shindo-step[data-shindo="5"] { background: #ff9d3f; }
+.shindo-step[data-shindo="6"] { background: #ef5345; color: #fff; }
+.shindo-step[data-shindo="7"] { background: #a244c8; color: #fff; }
+
+.shindo-step.active {
+  opacity: 1;
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 0 0 2px #fff, 0 6px 16px rgba(0,0,0,.35);
+}
+
+.shindo-step.passed {
+  opacity: .78;
+}
+
+.target-shindo {
+  margin: 7px 10px 0;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 4px;
+  padding: 7px 9px;
+  background: rgba(255,255,255,.035);
+}
+
+.target-shindo span {
+  color: #8fa0b2;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.target-shindo strong {
+  font-size: 17px;
+}
+
+@media (max-width: 780px) {
+  .shindo-panel {
+    margin: 0 8px 8px;
+  }
+  .shindo-head strong {
+    font-size: 25px;
+  }
+  .shindo-step {
+    height: 25px;
+  }
+}
