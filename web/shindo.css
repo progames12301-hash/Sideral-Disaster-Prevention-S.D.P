@@ -73,9 +73,7 @@
   box-shadow: 0 0 0 2px #fff, 0 6px 16px rgba(0,0,0,.35);
 }
 
-.shindo-step.passed {
-  opacity: .78;
-}
+.shindo-step.passed { opacity: .78; }
 
 .target-shindo {
   margin: 7px 10px 0;
@@ -97,18 +95,77 @@
   letter-spacing: .08em;
 }
 
-.target-shindo strong {
-  font-size: 17px;
+.target-shindo strong { font-size: 17px; }
+
+/* Live station intensity: blue is the normal state. Colors represent waveform activity,
+   never network latency. */
+.station-marker {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #2f80ed;
+  border: 1px solid rgba(225,242,255,.92);
+  box-shadow: 0 0 0 2px rgba(5,15,28,.45);
+  transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease, opacity .16s ease;
+}
+.station-marker.offline { opacity: .32; background: #31537b; border-color: #7890aa; }
+.station-marker.online.activity-0 { background: #2f80ed; border-color: #b7dcff; }
+.station-marker.online.activity-1 { background: #24b9ff; border-color: #c2eeff; }
+.station-marker.online.activity-2 { background: #39d98a; border-color: #c5ffe3; }
+.station-marker.online.activity-3 { background: #e8df36; border-color: #fffbc2; }
+.station-marker.online.activity-4 { background: #ff9f2d; border-color: #ffe0aa; }
+.station-marker.online.activity-5 { background: #ff4d3d; border-color: #ffc2bc; }
+.station-marker.online.activity-6 { background: #d9359f; border-color: #ffd0ef; }
+.station-marker.triggered {
+  transform: scale(1.3);
+  box-shadow: 0 0 0 3px rgba(255,255,255,.18), 0 0 14px rgba(255,255,255,.35);
 }
 
+/* Override the old latency-based colors from style.css. */
+.station-marker.latency-delayed.online,
+.station-marker.latency-late.online,
+.station-marker.latency-stale.online { border-color: inherit; }
+
+/* Compact, stable hypocenter marker. */
+.epicenter-marker {
+  width: 30px;
+  height: 30px;
+  position: relative;
+  filter: drop-shadow(0 0 4px rgba(0,0,0,.85));
+}
+.epicenter-marker::before,
+.epicenter-marker::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 2px;
+  width: 2px;
+  height: 26px;
+  background: #ff3d2f;
+  border-radius: 1px;
+  box-shadow: 0 0 5px rgba(255,61,47,.72);
+}
+.epicenter-marker::before { transform: rotate(45deg); }
+.epicenter-marker::after { transform: rotate(-45deg); }
+.epicenter-marker span {
+  position: absolute;
+  left: 11px;
+  top: 11px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #ff3d2f;
+  z-index: 2;
+}
+.wavefront { pointer-events: none; }
+.leaflet-overlay-pane .wavefront-p { filter: drop-shadow(0 0 2px rgba(56,189,248,.55)); }
+.leaflet-overlay-pane .wavefront-s { filter: drop-shadow(0 0 2px rgba(255,59,104,.6)); }
+.metric > strong { min-width: 70px; text-align: right; }
+.metric small { max-width: 160px; line-height: 1.15; }
+
 @media (max-width: 780px) {
-  .shindo-panel {
-    margin: 0 8px 8px;
-  }
-  .shindo-head strong {
-    font-size: 25px;
-  }
-  .shindo-step {
-    height: 25px;
-  }
+  .shindo-panel { margin: 0 8px 8px; }
+  .shindo-head strong { font-size: 25px; }
+  .shindo-step { height: 25px; }
 }
