@@ -1,0 +1,9 @@
+{
+  "name": "Sideral Disaster Prevention — S.D.P",
+  "short_name": "S.D.P",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d131a",
+  "theme_color": "#111820",
+  "description": "Monitoramento sísmico experimental e visualização de ondas P/S no Brasil"
+}
