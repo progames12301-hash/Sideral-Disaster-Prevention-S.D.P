@@ -1,0 +1,45 @@
+/* S.D.P station activity palette
+   Activity is a relative STA/LTA signal indicator, not seismic intensity.
+   Normal background/noise stays blue. Colors only warm as the station
+   approaches the conservative trigger threshold. */
+.station-marker {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #2f80ed;
+  border: 1px solid #b7dcff;
+  box-shadow: 0 0 0 2px rgba(5,15,28,.45);
+  transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease, opacity .16s ease;
+}
+
+.station-marker.offline {
+  opacity: .32;
+  background: #31537b;
+  border-color: #7890aa;
+}
+
+/* 0–2 are intentionally blue: ordinary microseismic/cultural noise should
+   not make the national map look like it is constantly shaking. */
+.station-marker.online.activity-0 { background: #2f80ed; border-color: #b7dcff; }
+.station-marker.online.activity-1 { background: #2f80ed; border-color: #b7dcff; }
+.station-marker.online.activity-2 { background: #2997e8; border-color: #c0e5ff; }
+
+/* Increasing signal-to-noise response. */
+.station-marker.online.activity-3 { background: #20b8d8; border-color: #c9f5ff; }
+.station-marker.online.activity-4 { background: #39c878; border-color: #d1ffe5; }
+.station-marker.online.activity-5 { background: #f0c735; border-color: #fff1a6; }
+.station-marker.online.activity-6 { background: #ef493d; border-color: #ffc1bc; }
+
+/* A trigger gets emphasis, but its actual color still comes from activity. */
+.station-marker.triggered {
+  transform: scale(1.28);
+  box-shadow: 0 0 0 3px rgba(255,255,255,.18), 0 0 15px rgba(255,255,255,.55);
+}
+
+/* Latency remains available in telemetry/tooltips and must not recolor a
+   station as if network delay were ground motion. */
+.station-marker.online.latency-delayed,
+.station-marker.online.latency-late,
+.station-marker.online.latency-stale {
+  border-color: inherit;
+}
