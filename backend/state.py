@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import copy
 import queue
+import statistics
 import threading
 import time
+from collections import deque
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,8 +18,21 @@ def utc_iso(ts: float | None = None) -> str:
     return dt.isoformat().replace("+00:00", "Z")
 
 
+def _percentile(values: list[float], q: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    pos = (len(ordered) - 1) * q
+    lo = int(pos)
+    hi = min(lo + 1, len(ordered) - 1)
+    frac = pos - lo
+    return ordered[lo] * (1 - frac) + ordered[hi] * frac
+
+
 class SystemState:
-    def __init__(self) -> None:
+    def __init__(self, latency_history_size: int = 120) -> None:
         self._lock = threading.RLock()
         self.outbox: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=5000)
         self.stations: dict[str, dict[str, Any]] = {}
@@ -25,7 +40,11 @@ class SystemState:
         self.current_event: dict[str, Any] | None = None
         self.history: list[dict[str, Any]] = []
         self.recent_picks: list[dict[str, Any]] = []
-        self.started_at = utc_iso()
+        self.started_epoch = time.time()
+        self.started_at = utc_iso(self.started_epoch)
+        self._latencies: dict[str, deque[float]] = {}
+        self._last_received_epoch: dict[str, float] = {}
+        self._latency_history_size = max(10, latency_history_size)
 
     def emit(self, message: dict[str, Any]) -> None:
         try:
@@ -63,6 +82,7 @@ class SystemState:
                 channels.append(channel)
             merged["channels"] = sorted(channels)
             self.stations[key] = merged
+            self._latencies.setdefault(key, deque(maxlen=self._latency_history_size))
 
     @staticmethod
     def _latency_class(latency: float) -> str:
@@ -89,6 +109,8 @@ class SystemState:
             station = self.stations.get(key)
             if not station:
                 return
+            self._latencies.setdefault(key, deque(maxlen=self._latency_history_size)).append(latency)
+            self._last_received_epoch[key] = received_ts
             station["online"] = True
             station["activity"] = round(max(0.0, min(activity, 1.0)), 3)
             station["lastData"] = utc_iso(data_ts)
@@ -110,6 +132,57 @@ class SystemState:
                 "lastChannel": station.get("lastChannel"),
             }
         self.emit({"type": "station", "data": payload})
+
+    def expire_stale_stations(self, fresh_seconds: float) -> int:
+        now = time.time()
+        changed: list[str] = []
+        with self._lock:
+            for key, station in self.stations.items():
+                last = self._last_received_epoch.get(key)
+                if station.get("online") and (last is None or now - last > fresh_seconds):
+                    station["online"] = False
+                    station["latencyClass"] = "stale"
+                    changed.append(key)
+        for key in changed:
+            self.emit({"type": "station", "data": {"key": key, "online": False, "latencyClass": "stale"}})
+        return len(changed)
+
+    def latency_report(self, eew_threshold_seconds: float, fresh_seconds: float) -> dict[str, Any]:
+        now = time.time()
+        rows: list[dict[str, Any]] = []
+        with self._lock:
+            for key, station in self.stations.items():
+                samples = list(self._latencies.get(key, ()))
+                last_received = self._last_received_epoch.get(key)
+                fresh = last_received is not None and now - last_received <= fresh_seconds
+                median = statistics.median(samples) if samples else None
+                p95 = _percentile(samples, 0.95)
+                row = {
+                    "key": key,
+                    "source": station.get("source"),
+                    "network": station.get("network"),
+                    "station": station.get("station"),
+                    "lat": station.get("lat"),
+                    "lon": station.get("lon"),
+                    "sampleCount": len(samples),
+                    "lastLatencySeconds": round(samples[-1], 2) if samples else None,
+                    "medianLatencySeconds": round(median, 2) if median is not None else None,
+                    "p95LatencySeconds": round(p95, 2) if p95 is not None else None,
+                    "fresh": fresh,
+                    "eewStreamEligible": bool(fresh and len(samples) >= 3 and p95 is not None and p95 <= eew_threshold_seconds),
+                    "lastReceived": station.get("lastReceived"),
+                }
+                rows.append(row)
+        rows.sort(key=lambda r: (not r["eewStreamEligible"], r["p95LatencySeconds"] is None, r["p95LatencySeconds"] or 1e9, r["key"]))
+        eligible = [r for r in rows if r["eewStreamEligible"]]
+        return {
+            "generatedAt": utc_iso(now),
+            "thresholdSeconds": eew_threshold_seconds,
+            "freshSeconds": fresh_seconds,
+            "stationCount": len(rows),
+            "eligibleCount": len(eligible),
+            "stations": rows,
+        }
 
     def mark_trigger(self, key: str, pick_time: float, score: float, phase: str = "P", picker: str = "stalta") -> None:
         with self._lock:
@@ -172,24 +245,21 @@ class SystemState:
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             stations = copy.deepcopy(list(self.stations.values()))
-            latencies = [
-                float(s["latencySeconds"])
-                for s in stations
-                if s.get("latencySeconds") is not None and s.get("online")
-            ]
+            latencies = [float(s["latencySeconds"]) for s in stations if s.get("latencySeconds") is not None and s.get("online")]
             latencies.sort()
-            median_latency = latencies[len(latencies) // 2] if latencies else None
+            median_latency = statistics.median(latencies) if latencies else None
             network_health = {
                 "stationCount": len(stations),
                 "onlineCount": sum(1 for s in stations if s.get("online")),
-                "realtimeCount": sum(1 for s in stations if s.get("latencyClass") == "realtime"),
-                "delayedCount": sum(1 for s in stations if s.get("latencyClass") == "delayed"),
-                "lateCount": sum(1 for s in stations if s.get("latencyClass") == "late"),
+                "realtimeCount": sum(1 for s in stations if s.get("online") and s.get("latencyClass") == "realtime"),
+                "delayedCount": sum(1 for s in stations if s.get("online") and s.get("latencyClass") == "delayed"),
+                "lateCount": sum(1 for s in stations if s.get("online") and s.get("latencyClass") == "late"),
                 "staleCount": sum(1 for s in stations if s.get("latencyClass") == "stale"),
                 "medianLatencySeconds": round(median_latency, 2) if median_latency is not None else None,
             }
             return {
                 "startedAt": self.started_at,
+                "uptimeSeconds": round(time.time() - self.started_epoch, 1),
                 "stations": stations,
                 "sources": copy.deepcopy(list(self.sources.values())),
                 "currentEvent": copy.deepcopy(self.current_event),
