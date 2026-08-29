@@ -26,6 +26,7 @@ jobs:
       SDP_ENABLE_ON: 'false'
       SDP_ENABLE_UNB: 'false'
       SDP_ENABLE_UFRN: 'false'
+      PYTHONPATH: .
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
