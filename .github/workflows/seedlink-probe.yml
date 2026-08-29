@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 8
     env:
       SDP_ENABLE_USP: 'true'
-      SDP_ENABLE_ON: 'false'
+      SDP_ENABLE_ON: 'true'
       SDP_ENABLE_UNB: 'false'
       SDP_ENABLE_UFRN: 'false'
       SDP_THREE_COMPONENT_STREAMS: 'false'
@@ -39,9 +39,9 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
       - run: pip install -r requirements.txt
-      - name: Probe USP SeedLink for 75 seconds
+      - name: Probe verified Brazilian SeedLink sources for 90 seconds
         continue-on-error: true
-        run: python tools/seedlink_probe.py --duration 75 --max-stations 60 --output reports/latest-seedlink-probe.json
+        run: python tools/seedlink_probe.py --duration 90 --max-stations 90 --output reports/latest-seedlink-probe.json
       - name: Show result
         run: cat reports/latest-seedlink-probe.json
       - name: Commit latest measurement
