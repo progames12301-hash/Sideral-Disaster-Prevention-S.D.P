@@ -101,12 +101,19 @@ class EventAssociator:
                 )
             )
 
-            eew_eligible = median_latency <= self.settings.eew_max_pick_latency_seconds
+            # An EEW label now requires a real multi-station low-latency quorum, not just a
+            # low median. Late picks may still refine location, but cannot make a late event
+            # look like an early warning.
+            low_latency_used = [
+                p for p in used if p.latency_seconds <= self.settings.eew_max_pick_latency_seconds
+            ]
+            low_latency_station_count = self._distinct_station_count(low_latency_used)
+            eew_eligible = low_latency_station_count >= self.settings.min_stations
             status = "automatic_preliminary" if eew_eligible else "automatic_late"
             status_label = (
-                "Detecção automática preliminar · baixa latência"
+                "Detecção automática preliminar · quórum de baixa latência"
                 if eew_eligible
-                else "Detecção automática · dados com atraso"
+                else "Detecção automática · sem quórum EEW de baixa latência"
             )
 
             phases = {"P": 0, "S": 0}
@@ -120,6 +127,7 @@ class EventAssociator:
                 "status": status,
                 "statusLabel": status_label,
                 "eewEligible": eew_eligible,
+                "lowLatencyStationCount": low_latency_station_count,
                 "originTime": utc_iso(result.origin_time),
                 "originEpoch": result.origin_time,
                 "lat": round(result.latitude, 4),
