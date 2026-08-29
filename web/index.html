@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://unpkg.com">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/shindo.css">
 </head>
 <body>
   <div id="app">
@@ -53,6 +54,23 @@
           <strong><span id="depthValue">—</span><small> km</small></strong>
         </div>
 
+        <div class="shindo-panel" aria-label="Escala Shindo estimada">
+          <div class="shindo-head">
+            <span>SHINDO ESTIMADO</span>
+            <strong id="shindoValue">—</strong>
+            <small id="shindoMeta">Aguardando magnitude confirmada</small>
+          </div>
+          <div class="shindo-scale" id="shindoScale">
+            <span class="shindo-step" data-shindo="1">1</span>
+            <span class="shindo-step" data-shindo="2">2</span>
+            <span class="shindo-step" data-shindo="3">3</span>
+            <span class="shindo-step" data-shindo="4">4</span>
+            <span class="shindo-step" data-shindo="5">5</span>
+            <span class="shindo-step" data-shindo="6">6</span>
+            <span class="shindo-step" data-shindo="7">7</span>
+          </div>
+        </div>
+
         <div class="event-details-grid">
           <div><span>Estações</span><strong id="stationCount">0</strong></div>
           <div><span>Confiança</span><strong id="confidence">—</strong></div>
@@ -84,6 +102,10 @@
           <div><span>ONDA P</span><strong id="pEta">—</strong></div>
           <div><span>ONDA S</span><strong id="sEta">—</strong></div>
         </div>
+        <div class="target-shindo">
+          <span>SHINDO EST. NO PONTO</span>
+          <strong id="targetShindo">—</strong>
+        </div>
       </section>
 
       <section class="history-card">
@@ -94,7 +116,7 @@
       </section>
 
       <p class="disclaimer">
-        Sistema experimental e não oficial. Não substitui comunicados da RSBR, USP/IAG, Observatório Nacional, UnB, UFRN ou Defesa Civil.
+        Sistema experimental e não oficial. Shindo é uma estimativa instrumental aproximada até haver dados fortes calibrados. Não substitui comunicados da RSBR, USP/IAG, Observatório Nacional, UnB, UFRN ou Defesa Civil.
       </p>
     </aside>
 
