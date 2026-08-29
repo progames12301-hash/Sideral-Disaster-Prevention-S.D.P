@@ -56,6 +56,9 @@ class EventAssociator:
             else:
                 self._picks.append(pick)
 
+            # Three stations remain enough for the locator to test a candidate, but are no longer
+            # enough by themselves to publish a hypocenter to the map. That distinction prevents
+            # unrelated STA/LTA spikes from immediately creating convincing-looking P/S wave rings.
             if self._distinct_station_count(self._picks) < self.settings.min_stations:
                 return
 
@@ -74,12 +77,6 @@ class EventAssociator:
             station_count = self._distinct_station_count(used)
             if station_count < self.settings.min_stations:
                 return
-
-            if self._active_id is None or pick.time - self._active_last_pick > window:
-                self._active_id = f"sdp-{uuid.uuid4().hex[:10]}"
-                self._revision = 0
-            self._active_last_pick = pick.time
-            self._revision += 1
 
             rms_quality = max(0.0, 1.0 - result.rms_seconds / self.settings.max_location_rms_seconds)
             station_quality = min(1.0, max(0.0, (station_count - 2) / 6.0))
@@ -101,19 +98,42 @@ class EventAssociator:
                 )
             )
 
-            # An EEW label now requires a real multi-station low-latency quorum, not just a
-            # low median. Late picks may still refine location, but cannot make a late event
-            # look like an early warning.
+            latest_pick_time = max(p.time for p in used)
+            origin_age = latest_pick_time - result.origin_time
+            public_required = max(self.settings.min_stations, self.settings.public_min_stations)
+
+            # Public-map gate: weak or poorly constrained solutions are kept internal. Four or more
+            # coherent stations, bounded residuals, usable geometry and a plausible recent origin are
+            # required before an automatic hypocenter is allowed to become the active public event.
+            if station_count < public_required:
+                return
+            if result.rms_seconds > self.settings.public_max_rms_seconds:
+                return
+            if result.azimuthal_gap_deg > self.settings.public_max_azimuthal_gap_deg:
+                return
+            if confidence < self.settings.public_min_confidence:
+                return
+            if origin_age < -3.0 or origin_age > self.settings.public_max_origin_age_seconds:
+                return
+
+            if self._active_id is None or pick.time - self._active_last_pick > window:
+                self._active_id = f"sdp-{uuid.uuid4().hex[:10]}"
+                self._revision = 0
+            self._active_last_pick = pick.time
+            self._revision += 1
+
+            # An EEW label requires the same strict public quorum to also be low-latency. Late picks
+            # may refine a real earthquake location, but do not trigger expanding warning rings.
             low_latency_used = [
                 p for p in used if p.latency_seconds <= self.settings.eew_max_pick_latency_seconds
             ]
             low_latency_station_count = self._distinct_station_count(low_latency_used)
-            eew_eligible = low_latency_station_count >= self.settings.min_stations
+            eew_eligible = low_latency_station_count >= public_required
             status = "automatic_preliminary" if eew_eligible else "automatic_late"
             status_label = (
-                "Detecção automática preliminar · quórum de baixa latência"
+                "Detecção automática preliminar · quórum público de baixa latência"
                 if eew_eligible
-                else "Detecção automática · sem quórum EEW de baixa latência"
+                else "Detecção automática validada · dados sem quórum EEW de baixa latência"
             )
 
             phases = {"P": 0, "S": 0}
@@ -127,9 +147,13 @@ class EventAssociator:
                 "status": status,
                 "statusLabel": status_label,
                 "eewEligible": eew_eligible,
+                "waveEligible": eew_eligible,
+                "publicEligible": True,
+                "publicRequiredStations": public_required,
                 "lowLatencyStationCount": low_latency_station_count,
                 "originTime": utc_iso(result.origin_time),
                 "originEpoch": result.origin_time,
+                "originAgeAtDetectionSeconds": round(origin_age, 2),
                 "lat": round(result.latitude, 4),
                 "lon": round(result.longitude, 4),
                 "depthKm": round(result.depth_km, 1),
