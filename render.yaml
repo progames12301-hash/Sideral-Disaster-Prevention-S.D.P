@@ -6,6 +6,7 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT
     autoDeploy: true
+    healthCheckPath: /api/live
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
@@ -25,3 +26,7 @@ services:
         value: stalta
       - key: SDP_EEW_MAX_PICK_LATENCY
         value: 8
+      - key: SDP_SEEDLINK_STALL_SECONDS
+        value: 120
+      - key: SDP_STATION_FRESH_SECONDS
+        value: 45
