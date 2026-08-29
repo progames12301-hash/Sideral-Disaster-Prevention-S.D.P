@@ -25,6 +25,16 @@ services:
         value: true
       - key: SDP_PHASE_PICKER
         value: stalta
+      - key: SDP_TRIGGER_ON
+        value: 6.0
+      - key: SDP_TRIGGER_OFF
+        value: 1.25
+      - key: SDP_STA_SECONDS
+        value: 0.8
+      - key: SDP_LTA_SECONDS
+        value: 10.0
+      - key: SDP_REFRACTORY_SECONDS
+        value: 20.0
       - key: SDP_EEW_MAX_PICK_LATENCY
         value: 8
       - key: SDP_SEEDLINK_STALL_SECONDS
