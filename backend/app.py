@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import threading
 import time
 import uuid
@@ -9,6 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -135,7 +137,25 @@ async def lifespan(app: FastAPI):
     task.cancel()
 
 
-app = FastAPI(title="Sideral Disaster Prevention — S.D.P", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="Sideral Disaster Prevention — S.D.P", version="0.3.1", lifespan=lifespan)
+
+_default_origins = (
+    "https://progames12301-hash.github.io,"
+    "http://localhost:5500,http://127.0.0.1:5500,"
+    "http://localhost:5501,http://127.0.0.1:5501"
+)
+_allowed_origins = [
+    item.strip()
+    for item in os.getenv("SDP_ALLOWED_ORIGINS", _default_origins).split(",")
+    if item.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allowed_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/api/health")
@@ -145,7 +165,7 @@ def health() -> dict:
     streaming = [s for s in enabled if s.get("state") == "streaming"]
     return {
         "ok": True,
-        "version": "0.3.0",
+        "version": "0.3.1",
         "time": utc_iso(),
         "enabledSources": len(enabled),
         "streamingSources": len(streaming),
@@ -158,7 +178,7 @@ def health() -> dict:
 
 @app.get("/api/live")
 def live() -> dict:
-    return {"ok": True, "version": "0.3.0", "time": utc_iso()}
+    return {"ok": True, "version": "0.3.1", "time": utc_iso()}
 
 
 @app.get("/api/ready")
@@ -189,7 +209,7 @@ def network_latency() -> dict:
 def api_state() -> dict:
     payload = state.snapshot()
     payload["config"] = {
-        "version": "0.3.0",
+        "version": "0.3.1",
         "pVelocityKmS": settings.p_velocity_km_s,
         "sVelocityKmS": settings.s_velocity_km_s,
         "minStations": settings.min_stations,
