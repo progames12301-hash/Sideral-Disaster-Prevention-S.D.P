@@ -11,7 +11,8 @@
   const els = Object.fromEntries([
     'linkStatus','alertStrip','alertHeadline','eventTime','eventLocation','eventCoordinates','magnitudeType','magnitudeValue',
     'eventStatus','depthValue','stationCount','confidence','rmsValue','uncertainty','phaseCount','pickLatency','azimuthalGap','revision','eewMode','onlineCount','medianLatency','sources','targetText','pEta','sEta',
-    'historyCount','historyList','utcClock','lastUpdate','mapNotice','locateMe','clearTarget','fitBrazil','toggleStations'
+    'historyCount','historyList','utcClock','lastUpdate','mapNotice','locateMe','clearTarget','fitBrazil','toggleStations',
+    'shindoValue','shindoMeta','shindoScale','targetShindo'
   ].map(id => [id, document.getElementById(id)]));
 
   const stationLayer = L.layerGroup().addTo(map);
@@ -64,6 +65,78 @@
     return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   }
 
+  // Experimental Shindo proxy. A real JMA instrumental intensity requires calibrated strong-motion
+  // acceleration and the official frequency/duration processing. Until those channels are available,
+  // we estimate PGA from magnitude + hypocentral distance and convert it to a 1–7 display class.
+  function shindoProxy(event, lat, lon) {
+    if (!event || event.magnitude === null || event.magnitude === undefined) return null;
+    const magnitude = Number(event.magnitude);
+    if (!Number.isFinite(magnitude)) return null;
+    const eventLat = Number(event.lat);
+    const eventLon = Number(event.lon);
+    if (!Number.isFinite(eventLat) || !Number.isFinite(eventLon)) return null;
+
+    const surfaceKm = haversine(eventLat, eventLon, Number(lat), Number(lon));
+    const depthKm = Math.max(0, Number(event.depthKm ?? 10));
+    const rKm = Math.max(1, Math.sqrt(surfaceKm * surfaceKm + depthKm * depthKm));
+
+    // Compact regional attenuation proxy (PGA in gal). It is intentionally labeled as estimated,
+    // never as an official JMA observation.
+    const saturation = 0.0055 * Math.pow(10, 0.5 * magnitude);
+    const logPga = 0.5 * magnitude + 0.61 - Math.log10(rKm + saturation) - 0.003 * rKm;
+    const pgaGal = Math.max(0.01, Math.pow(10, logPga));
+    const instrumental = 2 * Math.log10(pgaGal) + 0.94;
+
+    let level = 0;
+    if (instrumental >= 6.5) level = 7;
+    else if (instrumental >= 5.5) level = 6;
+    else if (instrumental >= 4.5) level = 5;
+    else if (instrumental >= 3.5) level = 4;
+    else if (instrumental >= 2.5) level = 3;
+    else if (instrumental >= 1.5) level = 2;
+    else if (instrumental >= 0.5) level = 1;
+
+    return { level, pgaGal, instrumental, distanceKm: rKm };
+  }
+
+  function renderShindo(event) {
+    const steps = els.shindoScale ? [...els.shindoScale.querySelectorAll('.shindo-step')] : [];
+    steps.forEach(step => step.classList.remove('active', 'passed'));
+
+    if (!event || event.magnitude === null || event.magnitude === undefined) {
+      if (els.shindoValue) els.shindoValue.textContent = '—';
+      if (els.shindoMeta) els.shindoMeta.textContent = 'Aguardando magnitude confirmada';
+      return;
+    }
+
+    const proxy = shindoProxy(event, event.lat, event.lon);
+    if (!proxy) {
+      if (els.shindoValue) els.shindoValue.textContent = '—';
+      if (els.shindoMeta) els.shindoMeta.textContent = 'Estimativa indisponível';
+      return;
+    }
+
+    if (els.shindoValue) els.shindoValue.textContent = proxy.level > 0 ? String(proxy.level) : '<1';
+    if (els.shindoMeta) {
+      els.shindoMeta.textContent = `proxy no hipocentro · PGA ≈ ${proxy.pgaGal.toFixed(proxy.pgaGal < 10 ? 1 : 0)} gal`;
+    }
+    steps.forEach(step => {
+      const value = Number(step.dataset.shindo);
+      if (proxy.level > 0 && value < proxy.level) step.classList.add('passed');
+      if (value === proxy.level) step.classList.add('active');
+    });
+  }
+
+  function isWaveEventActive(event) {
+    if (!event) return false;
+    const allowed = event.waveEligible === true || (event.waveEligible == null && event.eewEligible === true);
+    if (!allowed) return false;
+    const origin = Number(event.originEpoch || new Date(event.originTime).getTime()/1000);
+    if (!Number.isFinite(origin)) return false;
+    const age = Date.now()/1000 - origin;
+    return age >= -5 && age <= 600;
+  }
+
   function eventName(event) {
     if (!event) return 'Sem evento ativo';
     return event.status === 'catalog_confirmed' ? 'Evento confirmado no catálogo' : 'Epicentro estimado';
@@ -91,7 +164,13 @@
       els.revision.textContent = '—';
       els.eewMode.textContent = 'EEW em espera';
       els.eewMode.className = 'eew-mode';
+      if (els.targetShindo) els.targetShindo.textContent = '—';
+      renderShindo(null);
       eventLayer.clearLayers();
+      pCircle = null;
+      sCircle = null;
+      uncertaintyCircle = null;
+      epicenterMarker = null;
       return;
     }
 
@@ -120,15 +199,22 @@
       els.eewMode.textContent = 'BAIXA LATÊNCIA · EEW CANDIDATO';
       els.eewMode.className = 'eew-mode eligible';
     } else {
-      els.eewMode.textContent = 'DETECÇÃO COM ATRASO';
+      els.eewMode.textContent = 'DETECÇÃO VALIDADA · SEM ONDAS EEW';
       els.eewMode.className = 'eew-mode late';
     }
 
+    renderShindo(event);
     eventLayer.clearLayers();
+    pCircle = null;
+    sCircle = null;
+    uncertaintyCircle = null;
     epicenterMarker = L.marker([event.lat, event.lon], { icon: epicenterIcon, zIndexOffset: 1200 }).addTo(eventLayer);
-    epicenterMarker.bindTooltip('Epicentro preliminar', { className: 'station-tooltip' });
-    pCircle = L.circle([event.lat, event.lon], { radius: 0, color: '#72d6ee', weight: 2, fillColor: '#72d6ee', fillOpacity: .015, interactive: false }).addTo(eventLayer);
-    sCircle = L.circle([event.lat, event.lon], { radius: 0, color: '#ef3f7d', weight: 3, fillColor: '#ef3f7d', fillOpacity: .035, interactive: false }).addTo(eventLayer);
+    epicenterMarker.bindTooltip(event.status === 'catalog_confirmed' ? 'Epicentro confirmado no catálogo' : 'Epicentro preliminar validado', { className: 'station-tooltip' });
+
+    if (isWaveEventActive(event)) {
+      pCircle = L.circle([event.lat, event.lon], { radius: 0, color: '#72d6ee', weight: 2, fillColor: '#72d6ee', fillOpacity: .015, interactive: false }).addTo(eventLayer);
+      sCircle = L.circle([event.lat, event.lon], { radius: 0, color: '#ef3f7d', weight: 3, fillColor: '#ef3f7d', fillOpacity: .035, interactive: false }).addTo(eventLayer);
+    }
     if (event.uncertaintyKm) {
       uncertaintyCircle = L.circle([event.lat, event.lon], { radius: event.uncertaintyKm * 1000, color: '#ff963e', dashArray: '5 7', weight: 1, fillColor: '#ff963e', fillOpacity: .035, interactive: false }).addTo(eventLayer);
     }
@@ -229,6 +315,7 @@
   }
 
   function addOrUpdateHistory(event) {
+    if (!event) return;
     const idx = history.findIndex(e => e.id === event.id);
     if (idx >= 0) history[idx] = { ...history[idx], ...event };
     else history.unshift(event);
@@ -247,6 +334,7 @@
     if (!target || !currentEvent) {
       els.pEta.textContent = '—';
       els.sEta.textContent = '—';
+      if (els.targetShindo) els.targetShindo.textContent = '—';
       return;
     }
     const d = haversine(currentEvent.lat, currentEvent.lon, target.lat, target.lon);
@@ -261,10 +349,16 @@
     const fmt = seconds => seconds > 0 ? `${Math.ceil(seconds)} s` : `passou ${Math.abs(Math.floor(seconds))} s`;
     els.pEta.textContent = fmt(pRemain);
     els.sEta.textContent = fmt(sRemain);
+
+    const targetProxy = shindoProxy(currentEvent, target.lat, target.lon);
+    if (els.targetShindo) {
+      els.targetShindo.textContent = targetProxy ? (targetProxy.level > 0 ? String(targetProxy.level) : '<1') : '—';
+      els.targetShindo.title = targetProxy ? `PGA estimado ≈ ${targetProxy.pgaGal.toFixed(1)} gal · distância hipocentral ≈ ${targetProxy.distanceKm.toFixed(0)} km` : 'Aguardando magnitude';
+    }
   }
 
   function animateWaves() {
-    if (currentEvent && pCircle && sCircle) {
+    if (currentEvent && pCircle && sCircle && isWaveEventActive(currentEvent)) {
       const origin = Number(currentEvent.originEpoch || new Date(currentEvent.originTime).getTime()/1000);
       const elapsed = Math.max(0, Date.now()/1000 - origin);
       const pRadius = Math.min(4500, elapsed * Number(currentEvent.pVelocityKmS || 6.0)) * 1000;
@@ -313,8 +407,8 @@
       } else if (msg.type === 'source') {
         patchSource(msg.data);
       } else if (msg.type === 'event') {
-        renderEvent(msg.data, true);
-        addOrUpdateHistory(msg.data);
+        renderEvent(msg.data || null, Boolean(msg.data));
+        if (msg.data) addOrUpdateHistory(msg.data);
       } else if (msg.type === 'history') {
         addOrUpdateHistory(msg.data);
       }
@@ -341,7 +435,10 @@
     );
   });
   els.clearTarget.addEventListener('click', () => {
-    target = null; targetLayer.clearLayers(); els.targetText.textContent = 'Clique no mapa para calcular a chegada estimada das ondas P e S.'; updateTargetEta();
+    target = null;
+    targetLayer.clearLayers();
+    els.targetText.textContent = 'Clique no mapa para calcular a chegada estimada das ondas P e S.';
+    updateTargetEta();
   });
   els.fitBrazil.addEventListener('click', () => map.fitBounds(BRAZIL_BOUNDS, { padding: [20,20] }));
   els.toggleStations.addEventListener('click', () => {
@@ -351,9 +448,8 @@
   });
 
   setInterval(() => {
-    const d = new Date();
-    els.utcClock.textContent = d.toLocaleTimeString('pt-BR', { timeZone:'UTC', hour12:false }) + ' UTC';
     refreshOnlineCount();
+    if (currentEvent && target) updateTargetEta();
   }, 1000);
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js').catch(() => {});
