@@ -72,6 +72,8 @@ class Settings:
     max_data_latency_seconds: float = _env_float("SDP_MAX_DATA_LATENCY", 40.0)
     eew_max_pick_latency_seconds: float = _env_float("SDP_EEW_MAX_PICK_LATENCY", 8.0)
     station_fresh_seconds: float = _env_float("SDP_STATION_FRESH_SECONDS", 45.0)
+    seedlink_stall_seconds: float = _env_float("SDP_SEEDLINK_STALL_SECONDS", 120.0)
+    latency_history_size: int = _env_int("SDP_LATENCY_HISTORY_SIZE", 120)
 
     # Metadata / streaming
     max_stations_per_source: int = _env_int("SDP_MAX_STATIONS_PER_SOURCE", 90)
