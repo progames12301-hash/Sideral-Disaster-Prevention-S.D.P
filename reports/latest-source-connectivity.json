@@ -1,0 +1,74 @@
+{
+  "generatedAt": "2026-08-29T16:57:25.276737Z",
+  "sources": [
+    {
+      "endpoint": "seisrequest.iag.usp.br:18000",
+      "host": "seisrequest.iag.usp.br",
+      "port": 18000,
+      "tcp": true,
+      "seedlinkHello": true,
+      "addresses": [
+        "143.107.18.55"
+      ],
+      "connectMs": 1618.9,
+      "hello": "SeedLink v3.3 (2024.020)\r\nCentro de Sismologia da USP",
+      "key": "usp",
+      "label": "USP / IAG",
+      "configuredEnabled": true,
+      "networks": [
+        "BL",
+        "BR"
+      ]
+    },
+    {
+      "endpoint": "rsis1.on.br:18000",
+      "host": "rsis1.on.br",
+      "port": 18000,
+      "tcp": true,
+      "seedlinkHello": true,
+      "addresses": [
+        "200.20.187.208"
+      ],
+      "connectMs": 957.5,
+      "hello": "SeedLink v3.2 (2014.071)\r\nObservatorio Nacional",
+      "key": "on",
+      "label": "Observatório Nacional",
+      "configuredEnabled": true,
+      "networks": [
+        "ON"
+      ]
+    },
+    {
+      "endpoint": "datisis.unb.br:18000",
+      "host": "datisis.unb.br",
+      "port": 18000,
+      "tcp": false,
+      "seedlinkHello": false,
+      "error": "DNS: [Errno -2] Name or service not known",
+      "key": "unb",
+      "label": "Universidade de Brasília",
+      "configuredEnabled": true,
+      "networks": [
+        "BR"
+      ]
+    },
+    {
+      "endpoint": "sislink.geofisica.ufrn.br:18000",
+      "host": "sislink.geofisica.ufrn.br",
+      "port": 18000,
+      "tcp": false,
+      "seedlinkHello": false,
+      "addresses": [
+        "177.20.146.161"
+      ],
+      "error": "TCP/SeedLink: timed out",
+      "key": "ufrn",
+      "label": "UFRN",
+      "configuredEnabled": true,
+      "networks": [
+        "NB"
+      ]
+    }
+  ],
+  "note": "Connectivity probe only. A successful SeedLink HELLO does not imply data access for every configured network/station."
+}
