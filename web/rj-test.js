@@ -9,33 +9,30 @@
   let running = false;
   let timers = [];
   let animationFrame = null;
+  let paintInterval = null;
   let testLayer = null;
   let chosen = [];
+  let syntheticStates = [];
 
   const nativeMap = L.map.bind(L);
   const nativeMarker = L.marker.bind(L);
   const nativeCircle = L.circle.bind(L);
 
-  // Capture the application's Leaflet map without changing app.js internals.
   L.map = (...args) => {
     const map = nativeMap(...args);
     capturedMap = map;
     return map;
   };
 
-  // Remember only real station markers created by app.js. Target/epicenter markers are ignored.
   L.marker = (latlng, options = {}) => {
     const marker = nativeMarker(latlng, options);
     const html = String(options?.icon?.options?.html || '');
-    if (html.includes('station-marker')) {
-      capturedStationMarkers.add(marker);
-    }
+    if (html.includes('station-marker')) capturedStationMarkers.add(marker);
     return marker;
   };
 
-  // Operational wavefronts can legitimately expand, but the experimental dashboard should
-  // never cover continents because of a stale/false candidate. This is only a display guard;
-  // the backend still decides whether waveEligible is true.
+  // Display safety net only. The backend still controls waveEligible. A stale/false
+  // experimental candidate must not paint continent-sized rings on the public map.
   L.circle = (latlng, options = {}) => {
     const circle = nativeCircle(latlng, options);
     const className = String(options?.className || '');
@@ -86,32 +83,30 @@
       return p.lat >= -24.8 && p.lat <= -20.0 && p.lng >= -46.5 && p.lng <= -40.0;
     });
 
-    if (rj.length < 7) {
-      rj = markers
-        .map(marker => {
-          const p = marker.getLatLng();
-          return { marker, d: haversine(TEST_CENTER[0], TEST_CENTER[1], p.lat, p.lng) };
-        })
-        .sort((a, b) => a.d - b.d)
-        .slice(0, Math.min(7, markers.length))
-        .map(item => item.marker);
-    } else {
-      rj = rj
-        .map(marker => {
-          const p = marker.getLatLng();
-          return { marker, d: haversine(TEST_CENTER[0], TEST_CENTER[1], p.lat, p.lng) };
-        })
-        .sort((a, b) => a.d - b.d)
-        .slice(0, 7)
-        .map(item => item.marker);
-    }
+    const nearest = list => list
+      .map(marker => {
+        const p = marker.getLatLng();
+        return { marker, d: haversine(TEST_CENTER[0], TEST_CENTER[1], p.lat, p.lng) };
+      })
+      .sort((a, b) => a.d - b.d)
+      .slice(0, Math.min(7, list.length))
+      .map(item => item.marker);
+
+    if (rj.length < 7) rj = nearest(markers);
+    else rj = nearest(rj);
     return rj;
   }
 
-  function paintStation(index, level, phase = 'P', triggered = false) {
+  function applySyntheticStation(index) {
     const marker = chosen[index];
-    if (!marker) return;
-    marker.setIcon(stationTestIcon(level, phase, triggered));
+    const state = syntheticStates[index];
+    if (!marker || !state) return;
+    marker.setIcon(stationTestIcon(state.level, state.phase, state.triggered));
+  }
+
+  function paintStation(index, level, phase = 'P', triggered = false) {
+    syntheticStates[index] = { level, phase, triggered };
+    applySyntheticStation(index);
   }
 
   function putText(id, value) {
@@ -146,8 +141,7 @@
       mode.textContent = 'MODO TESTE RJ · P/S SIMULADAS';
       mode.className = 'eew-mode test';
     }
-    const steps = document.querySelectorAll('.shindo-step');
-    steps.forEach(step => {
+    document.querySelectorAll('.shindo-step').forEach(step => {
       const n = Number(step.dataset.shindo);
       step.classList.toggle('passed', n < 3);
       step.classList.toggle('active', n === 3);
@@ -168,7 +162,7 @@
       .bindTooltip('SIMULAÇÃO — epicentro de teste', { direction: 'top' })
       .addTo(testLayer);
 
-    const uncertainty = nativeCircle(TEST_CENTER, {
+    nativeCircle(TEST_CENTER, {
       radius: 18000,
       color: '#ffb13b',
       weight: 1,
@@ -177,7 +171,6 @@
       fill: false,
       interactive: false
     }).addTo(testLayer);
-    uncertainty.setStyle({ className: 'test-only' });
 
     const p = nativeCircle(TEST_CENTER, {
       radius: 0,
@@ -226,12 +219,12 @@
     running = false;
     timers.forEach(clearTimeout);
     timers = [];
+    if (paintInterval) clearInterval(paintInterval);
+    paintInterval = null;
     if (animationFrame) cancelAnimationFrame(animationFrame);
     animationFrame = null;
     if (testLayer && capturedMap) capturedMap.removeLayer(testLayer);
     testLayer = null;
-    // Reload restores every station and panel from the real backend snapshot, guaranteeing that
-    // the temporary test can never leak into real event/history state.
     location.reload();
   }
 
@@ -252,6 +245,7 @@
     }
 
     running = true;
+    syntheticStates = [];
     document.body.classList.add('sdp-test-running');
     const button = byId('testRJ');
     if (button) {
@@ -265,7 +259,14 @@
     badge.textContent = 'SIMULAÇÃO RJ · DADOS NÃO REAIS';
     document.querySelector('.map-shell')?.appendChild(badge);
 
-    // Stage 1: a few real RJ/nearby station positions begin to react; no epicenter yet.
+    // Live WebSocket station messages may continue arriving while the local test runs.
+    // Re-apply only the chosen synthetic markers; no backend data is changed.
+    paintInterval = setInterval(() => {
+      if (!running) return;
+      syntheticStates.forEach((_, index) => applySyntheticStation(index));
+    }, 180);
+
+    // Stage 1: actual mapped station positions around RJ react first; no epicenter exists yet.
     paintStation(0, 2);
     paintStation(1, 1);
     schedule(700, () => {
@@ -279,7 +280,7 @@
       paintStation(4, 2, 'P', false);
     });
 
-    // Only after the synthetic multi-station quorum do we release a local test hypocenter.
+    // The synthetic hypocenter is released only after the visible multi-station sequence.
     schedule(2600, () => {
       paintStation(4, 4, 'P', true);
       paintStation(5, 3, 'P', true);
