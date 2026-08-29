@@ -27,6 +27,14 @@
   window.SDP_API_BASE = API_BASE;
   window.SDP_BACKEND_MODE = API_BASE ? 'remote' : 'same-origin';
 
+  if (isGithubPages && 'serviceWorker' in navigator) {
+    const nativeRegister = navigator.serviceWorker.register.bind(navigator.serviceWorker);
+    navigator.serviceWorker.register = (scriptURL, options) => {
+      const routed = scriptURL === '/static/sw.js' ? './web/sw.js' : scriptURL;
+      return nativeRegister(routed, options);
+    };
+  }
+
   if (!API_BASE) return;
 
   const nativeFetch = window.fetch.bind(window);
