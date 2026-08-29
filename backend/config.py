@@ -63,13 +63,32 @@ class Settings:
 
     # A public alert is deliberately stricter than an internal candidate. Three picks can
     # mathematically define a hypocenter too easily, so the dashboard waits for a stronger
-    # multi-station solution before drawing P/S wave fronts.
+    # multi-station solution before drawing a public event.
     public_min_stations: int = _env_int("SDP_PUBLIC_MIN_STATIONS", 4)
     public_max_rms_seconds: float = _env_float("SDP_PUBLIC_MAX_RMS", 3.0)
     public_max_azimuthal_gap_deg: float = _env_float("SDP_PUBLIC_MAX_AZIMUTHAL_GAP", 300.0)
     public_min_confidence: int = _env_int("SDP_PUBLIC_MIN_CONFIDENCE", 45)
     public_max_origin_age_seconds: float = _env_float("SDP_PUBLIC_MAX_ORIGIN_AGE", 240.0)
     active_event_seconds: float = _env_float("SDP_ACTIVE_EVENT_SECONDS", 600.0)
+
+    # REV/SREV-style separation: raw shaking detection is allowed to be sensitive, but a
+    # STA/LTA-only hypothesis must be much stronger before it becomes a public hypocenter.
+    # This prevents ordinary transients from being promoted into convincing P/S wave rings.
+    stalta_public_min_stations: int = _env_int("SDP_STALTA_PUBLIC_MIN_STATIONS", 6)
+    stalta_public_max_rms_seconds: float = _env_float("SDP_STALTA_PUBLIC_MAX_RMS", 2.2)
+    stalta_public_max_azimuthal_gap_deg: float = _env_float("SDP_STALTA_PUBLIC_MAX_GAP", 260.0)
+    stalta_public_min_confidence: int = _env_int("SDP_STALTA_PUBLIC_MIN_CONFIDENCE", 60)
+    stalta_wave_min_stations: int = _env_int("SDP_STALTA_WAVE_MIN_STATIONS", 7)
+    reliable_phase_probability: float = _env_float("SDP_RELIABLE_PHASE_PROBABILITY", 0.45)
+    wave_min_reliable_phase_stations: int = _env_int("SDP_WAVE_MIN_RELIABLE_PHASE_STATIONS", 2)
+
+    # Revisions should behave like successive EEW bulletins: publish a new revision only when
+    # information materially improves or a periodic refresh is needed, not for every raw pick.
+    revision_min_interval_seconds: float = _env_float("SDP_REVISION_MIN_INTERVAL", 1.0)
+    revision_max_silence_seconds: float = _env_float("SDP_REVISION_MAX_SILENCE", 8.0)
+    revision_location_shift_km: float = _env_float("SDP_REVISION_LOCATION_SHIFT_KM", 10.0)
+    revision_depth_shift_km: float = _env_float("SDP_REVISION_DEPTH_SHIFT_KM", 8.0)
+    revision_confidence_delta: int = _env_int("SDP_REVISION_CONFIDENCE_DELTA", 5)
 
     # Regional travel-time approximation used by the fast locator.
     p_velocity_km_s: float = _env_float("SDP_P_VELOCITY", 6.0)
