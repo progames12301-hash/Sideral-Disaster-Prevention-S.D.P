@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: sideral-disaster-prevention
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: SDP_ENABLE_USP
+        value: true
+      - key: SDP_ENABLE_ON
+        value: false
+      - key: SDP_ENABLE_UNB
+        value: false
+      - key: SDP_ENABLE_UFRN
+        value: false
+      - key: SDP_MIN_STATIONS
+        value: 3
+      - key: SDP_THREE_COMPONENT_STREAMS
+        value: true
+      - key: SDP_PHASE_PICKER
+        value: stalta
+      - key: SDP_EEW_MAX_PICK_LATENCY
+        value: 8
