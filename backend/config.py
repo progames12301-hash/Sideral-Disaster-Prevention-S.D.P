@@ -50,13 +50,15 @@ class SeedLinkSource:
 
 @dataclass(frozen=True)
 class Settings:
-    # Detection / association
+    # Detection / association. These defaults are intentionally conservative for a mixed
+    # national SeedLink network: routine microseismic/cultural noise should remain blue and
+    # should not generate a pick merely because of a short single-sample STA/LTA excursion.
     min_stations: int = _env_int("SDP_MIN_STATIONS", 3)
-    trigger_on: float = _env_float("SDP_TRIGGER_ON", 4.5)
-    trigger_off: float = _env_float("SDP_TRIGGER_OFF", 1.5)
-    sta_seconds: float = _env_float("SDP_STA_SECONDS", 0.6)
-    lta_seconds: float = _env_float("SDP_LTA_SECONDS", 6.0)
-    refractory_seconds: float = _env_float("SDP_REFRACTORY_SECONDS", 12.0)
+    trigger_on: float = _env_float("SDP_TRIGGER_ON", 6.0)
+    trigger_off: float = _env_float("SDP_TRIGGER_OFF", 1.25)
+    sta_seconds: float = _env_float("SDP_STA_SECONDS", 0.8)
+    lta_seconds: float = _env_float("SDP_LTA_SECONDS", 10.0)
+    refractory_seconds: float = _env_float("SDP_REFRACTORY_SECONDS", 20.0)
     association_window_seconds: float = _env_float("SDP_ASSOC_WINDOW_SECONDS", 150.0)
     max_location_rms_seconds: float = _env_float("SDP_MAX_LOCATION_RMS", 5.0)
     max_pick_residual_seconds: float = _env_float("SDP_MAX_PICK_RESIDUAL", 4.0)
@@ -119,7 +121,7 @@ class Settings:
     debug_simulator: bool = _env_bool("SDP_DEBUG_SIMULATOR", False)
     catalog_url: str = os.getenv(
         "SDP_CATALOG_URL",
-        "http://www.moho.iag.usp.br/fdsnws/event/1/query",
+        "https://www.moho.iag.usp.br/fdsnws/event/1/query",
     )
 
     @property
