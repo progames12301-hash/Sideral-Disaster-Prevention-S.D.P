@@ -112,7 +112,7 @@ class Settings:
                 endpoint=os.getenv("SDP_ON_SEEDLINK", "rsis1.on.br:18000"),
                 networks=("ON",),
                 metadata_url=earthscope_meta,
-                enabled=_env_bool("SDP_ENABLE_ON", False),
+                enabled=_env_bool("SDP_ENABLE_ON", True),
             ),
             SeedLinkSource(
                 key="unb",
