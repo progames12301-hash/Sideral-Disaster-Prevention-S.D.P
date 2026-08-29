@@ -15,6 +15,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: sdp-seedlink-latency-report
+  cancel-in-progress: false
+
 jobs:
   probe:
     runs-on: ubuntu-latest
@@ -28,6 +32,8 @@ jobs:
       SDP_EEW_MAX_PICK_LATENCY: '8'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -45,4 +51,6 @@ jobs:
           git add reports/latest-seedlink-probe.json
           git diff --cached --quiet && exit 0
           git commit -m "chore: update SeedLink latency report [skip ci]"
-          git push
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
