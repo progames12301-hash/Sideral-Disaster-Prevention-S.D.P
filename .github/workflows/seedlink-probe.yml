@@ -1,0 +1,48 @@
+name: SeedLink latency probe
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/seedlink_probe.py'
+      - 'backend/seismic/seedlink.py'
+      - 'backend/seismic/stations.py'
+      - 'backend/config.py'
+      - '.github/workflows/seedlink-probe.yml'
+  schedule:
+    - cron: '17 */6 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SDP_ENABLE_USP: 'true'
+      SDP_ENABLE_ON: 'false'
+      SDP_ENABLE_UNB: 'false'
+      SDP_ENABLE_UFRN: 'false'
+      SDP_THREE_COMPONENT_STREAMS: 'false'
+      SDP_EEW_MAX_PICK_LATENCY: '8'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - run: pip install -r requirements.txt
+      - name: Probe USP SeedLink for 75 seconds
+        continue-on-error: true
+        run: python tools/seedlink_probe.py --duration 75 --max-stations 60 --output reports/latest-seedlink-probe.json
+      - name: Show result
+        run: cat reports/latest-seedlink-probe.json
+      - name: Commit latest measurement
+        run: |
+          git config user.name "sdp-latency-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add reports/latest-seedlink-probe.json
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: update SeedLink latency report [skip ci]"
+          git push
