@@ -12,7 +12,7 @@ from obspy.signal.trigger import classic_sta_lta
 from scipy.signal import butter, detrend, sosfiltfilt
 
 from backend.config import Settings
-from backend.seismic.locator import Pick, locate_event
+from backend.seismic.locator import Pick, haversine_km, locate_event
 from backend.seismic.stations import Station
 from backend.state import SystemState, utc_iso
 
@@ -33,10 +33,64 @@ class EventAssociator:
         self._active_id: str | None = None
         self._active_last_pick: float = 0.0
         self._revision = 0
+        self._last_public_event: dict | None = None
+        self._last_revision_epoch: float = 0.0
 
     @staticmethod
     def _distinct_station_count(picks: list[Pick]) -> int:
         return len({p.station_key for p in picks})
+
+    def _revision_reason(self, candidate: dict, now: float) -> str | None:
+        previous = self._last_public_event
+        if previous is None:
+            return "detecção inicial multiestação"
+
+        # Important state changes are published immediately, even inside the normal debounce.
+        if bool(candidate.get("eewEligible")) != bool(previous.get("eewEligible")):
+            return "estado EEW alterado"
+        if bool(candidate.get("depthResolved")) and not bool(previous.get("depthResolved")):
+            return "profundidade passou a ser restringida por fases"
+
+        elapsed = now - self._last_revision_epoch
+        if elapsed < self.settings.revision_min_interval_seconds:
+            return None
+
+        old_stations = int(previous.get("stationCount") or 0)
+        new_stations = int(candidate.get("stationCount") or 0)
+        if new_stations > old_stations:
+            return f"nova estação associada ({old_stations}→{new_stations})"
+
+        old_phases = previous.get("phaseCounts") or {}
+        new_phases = candidate.get("phaseCounts") or {}
+        if int(new_phases.get("S") or 0) > int(old_phases.get("S") or 0):
+            return "nova fase S associada"
+
+        try:
+            shift = haversine_km(
+                float(previous["lat"]),
+                float(previous["lon"]),
+                float(candidate["lat"]),
+                float(candidate["lon"]),
+            )
+        except Exception:
+            shift = 0.0
+        if shift >= self.settings.revision_location_shift_km:
+            return f"solução deslocou {shift:.0f} km"
+
+        old_depth = previous.get("depthKm")
+        new_depth = candidate.get("depthKm")
+        if old_depth is not None and new_depth is not None:
+            if abs(float(new_depth) - float(old_depth)) >= self.settings.revision_depth_shift_km:
+                return "profundidade revisada"
+
+        old_conf = int(previous.get("confidence") or 0)
+        new_conf = int(candidate.get("confidence") or 0)
+        if abs(new_conf - old_conf) >= self.settings.revision_confidence_delta:
+            return f"confiança revisada ({old_conf}%→{new_conf}%)"
+
+        if elapsed >= self.settings.revision_max_silence_seconds:
+            return "atualização periódica da solução"
+        return None
 
     def add(self, pick: Pick) -> None:
         with self._lock:
@@ -56,9 +110,8 @@ class EventAssociator:
             else:
                 self._picks.append(pick)
 
-            # Three stations remain enough for the locator to test a candidate, but are no longer
-            # enough by themselves to publish a hypocenter to the map. That distinction prevents
-            # unrelated STA/LTA spikes from immediately creating convincing-looking P/S wave rings.
+            # Raw station shaking is intentionally more sensitive than public event creation.
+            # Three stations are enough only to test an internal candidate solution.
             if self._distinct_station_count(self._picks) < self.settings.min_stations:
                 return
 
@@ -100,50 +153,82 @@ class EventAssociator:
 
             latest_pick_time = max(p.time for p in used)
             origin_age = latest_pick_time - result.origin_time
-            public_required = max(self.settings.min_stations, self.settings.public_min_stations)
 
-            # Public-map gate: weak or poorly constrained solutions are kept internal. Four or more
-            # coherent stations, bounded residuals, usable geometry and a plausible recent origin are
-            # required before an automatic hypocenter is allowed to become the active public event.
+            # SREV/REV distinguishes shaking detection from its low-accuracy epicenter-detection
+            # overlay. We do the same here: a STA/LTA-only solution must pass a much stricter public
+            # gate than a solution supported by a real phase picker such as PhaseNet.
+            picker_set = {str(p.picker or "").lower() for p in used}
+            stalta_only = bool(used) and picker_set.issubset({"stalta"})
+            public_required = max(self.settings.min_stations, self.settings.public_min_stations)
+            public_rms = self.settings.public_max_rms_seconds
+            public_gap = self.settings.public_max_azimuthal_gap_deg
+            public_confidence = self.settings.public_min_confidence
+            if stalta_only:
+                public_required = max(public_required, self.settings.stalta_public_min_stations)
+                public_rms = min(public_rms, self.settings.stalta_public_max_rms_seconds)
+                public_gap = min(public_gap, self.settings.stalta_public_max_azimuthal_gap_deg)
+                public_confidence = max(public_confidence, self.settings.stalta_public_min_confidence)
+
             if station_count < public_required:
                 return
-            if result.rms_seconds > self.settings.public_max_rms_seconds:
+            if result.rms_seconds > public_rms:
                 return
-            if result.azimuthal_gap_deg > self.settings.public_max_azimuthal_gap_deg:
+            if result.azimuthal_gap_deg > public_gap:
                 return
-            if confidence < self.settings.public_min_confidence:
+            if confidence < public_confidence:
                 return
             if origin_age < -3.0 or origin_age > self.settings.public_max_origin_age_seconds:
                 return
 
-            if self._active_id is None or pick.time - self._active_last_pick > window:
+            new_event = self._active_id is None or pick.time - self._active_last_pick > window
+            if new_event:
                 self._active_id = f"sdp-{uuid.uuid4().hex[:10]}"
                 self._revision = 0
+                self._last_public_event = None
+                self._last_revision_epoch = 0.0
             self._active_last_pick = pick.time
-            self._revision += 1
-
-            # An EEW label requires the same strict public quorum to also be low-latency. Late picks
-            # may refine a real earthquake location, but do not trigger expanding warning rings.
-            low_latency_used = [
-                p for p in used if p.latency_seconds <= self.settings.eew_max_pick_latency_seconds
-            ]
-            low_latency_station_count = self._distinct_station_count(low_latency_used)
-            eew_eligible = low_latency_station_count >= public_required
-            status = "automatic_preliminary" if eew_eligible else "automatic_late"
-            status_label = (
-                "Detecção automática preliminar · quórum público de baixa latência"
-                if eew_eligible
-                else "Detecção automática validada · dados sem quórum EEW de baixa latência"
-            )
 
             phases = {"P": 0, "S": 0}
             for p in used:
                 phase = "S" if p.phase.upper().startswith("S") else "P"
                 phases[phase] += 1
 
-            event = {
+            # Wavefronts are a stronger claim than a shaking marker or even a preliminary
+            # hypocenter. Require low latency plus reliable phase identification. In fallback
+            # STA/LTA mode we need an even larger multi-station quorum before P/S rings appear.
+            low_latency_used = [
+                p for p in used if p.latency_seconds <= self.settings.eew_max_pick_latency_seconds
+            ]
+            low_latency_station_count = self._distinct_station_count(low_latency_used)
+            reliable_phase_used = [
+                p
+                for p in low_latency_used
+                if str(p.picker or "").lower() != "stalta"
+                and p.probability >= self.settings.reliable_phase_probability
+            ]
+            reliable_phase_station_count = self._distinct_station_count(reliable_phase_used)
+
+            if stalta_only:
+                phase_gate = low_latency_station_count >= max(
+                    public_required, self.settings.stalta_wave_min_stations
+                )
+            else:
+                phase_gate = (
+                    reliable_phase_station_count >= self.settings.wave_min_reliable_phase_stations
+                )
+
+            eew_eligible = low_latency_station_count >= public_required and phase_gate
+            status = "automatic_preliminary" if eew_eligible else "automatic_validated"
+            if eew_eligible:
+                status_label = "Detecção automática preliminar · fases e latência compatíveis com EEW experimental"
+            elif stalta_only:
+                status_label = "Agitação multiestação validada · hipocentro preliminar de baixa confiança instrumental"
+            else:
+                status_label = "Hipocentro automático validado · sem quórum suficiente para ondas EEW"
+
+            candidate = {
                 "id": self._active_id,
-                "revision": self._revision,
+                "revision": self._revision + 1,
                 "status": status,
                 "statusLabel": status_label,
                 "eewEligible": eew_eligible,
@@ -151,6 +236,8 @@ class EventAssociator:
                 "publicEligible": True,
                 "publicRequiredStations": public_required,
                 "lowLatencyStationCount": low_latency_station_count,
+                "reliablePhaseStationCount": reliable_phase_station_count,
+                "phaseQuality": "stalta-only" if stalta_only else "phase-picker/mixed",
                 "originTime": utc_iso(result.origin_time),
                 "originEpoch": result.origin_time,
                 "originAgeAtDetectionSeconds": round(origin_age, 2),
@@ -176,7 +263,18 @@ class EventAssociator:
                 "pickerMix": sorted({p.picker for p in used}),
                 "updatedAt": utc_iso(),
             }
-            self.state.set_event(event)
+
+            now = time.time()
+            reason = self._revision_reason(candidate, now)
+            if reason is None:
+                return
+
+            self._revision += 1
+            candidate["revision"] = self._revision
+            candidate["revisionReason"] = reason
+            self._last_public_event = dict(candidate)
+            self._last_revision_epoch = now
+            self.state.set_event(candidate)
 
 
 class WaveformProcessor:
@@ -244,7 +342,8 @@ class WaveformProcessor:
             )
 
         # Classic lightweight picker is vertical-component only. Horizontal data remain available
-        # to the optional PhaseNet worker and future S-wave algorithms.
+        # to the optional PhaseNet worker and future S-wave algorithms. A vertical STA/LTA trigger
+        # is treated as a sensitive P candidate, not as a high-confidence phase classification.
         if not channel.endswith("Z"):
             return
 
@@ -305,7 +404,9 @@ class WaveformProcessor:
         last_trigger = self._last_trigger.get(key, 0.0)
         if score >= self.settings.trigger_on and pick_time - last_trigger >= self.settings.refractory_seconds:
             self._last_trigger[key] = pick_time
-            # Convert STA/LTA strength to a bounded heuristic confidence; not a calibrated probability.
+            # Convert STA/LTA strength to a bounded heuristic confidence; this is deliberately NOT
+            # treated as a calibrated P probability. The stricter STA/LTA-only public gate above
+            # absorbs that uncertainty.
             excess = max(0.0, score - self.settings.trigger_on)
             probability = 0.50 + 0.48 * (1.0 - math.exp(-excess / 3.0))
             pick = Pick(
