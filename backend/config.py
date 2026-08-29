@@ -61,6 +61,16 @@ class Settings:
     max_location_rms_seconds: float = _env_float("SDP_MAX_LOCATION_RMS", 5.0)
     max_pick_residual_seconds: float = _env_float("SDP_MAX_PICK_RESIDUAL", 4.0)
 
+    # A public alert is deliberately stricter than an internal candidate. Three picks can
+    # mathematically define a hypocenter too easily, so the dashboard waits for a stronger
+    # multi-station solution before drawing P/S wave fronts.
+    public_min_stations: int = _env_int("SDP_PUBLIC_MIN_STATIONS", 4)
+    public_max_rms_seconds: float = _env_float("SDP_PUBLIC_MAX_RMS", 3.0)
+    public_max_azimuthal_gap_deg: float = _env_float("SDP_PUBLIC_MAX_AZIMUTHAL_GAP", 300.0)
+    public_min_confidence: int = _env_int("SDP_PUBLIC_MIN_CONFIDENCE", 45)
+    public_max_origin_age_seconds: float = _env_float("SDP_PUBLIC_MAX_ORIGIN_AGE", 240.0)
+    active_event_seconds: float = _env_float("SDP_ACTIVE_EVENT_SECONDS", 600.0)
+
     # Regional travel-time approximation used by the fast locator.
     p_velocity_km_s: float = _env_float("SDP_P_VELOCITY", 6.0)
     s_velocity_km_s: float = _env_float("SDP_S_VELOCITY", 3.5)
