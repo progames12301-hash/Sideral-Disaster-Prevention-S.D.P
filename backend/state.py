@@ -147,6 +147,24 @@ class SystemState:
             self.emit({"type": "station", "data": {"key": key, "online": False, "latencyClass": "stale"}})
         return len(changed)
 
+    def expire_current_event(self, max_age_seconds: float) -> bool:
+        """Remove the active-map event after its useful warning window, keeping history intact."""
+        now = time.time()
+        expired = False
+        with self._lock:
+            event = self.current_event
+            if event is not None:
+                try:
+                    origin = float(event.get("originEpoch"))
+                except (TypeError, ValueError):
+                    origin = now
+                if now - origin > max(30.0, max_age_seconds):
+                    self.current_event = None
+                    expired = True
+        if expired:
+            self.emit({"type": "event", "data": None})
+        return expired
+
     def latency_report(self, eew_threshold_seconds: float, fresh_seconds: float) -> dict[str, Any]:
         now = time.time()
         rows: list[dict[str, Any]] = []
