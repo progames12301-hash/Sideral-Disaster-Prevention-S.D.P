@@ -13,7 +13,7 @@ services:
       - key: SDP_ENABLE_USP
         value: true
       - key: SDP_ENABLE_ON
-        value: false
+        value: true
       - key: SDP_ENABLE_UNB
         value: false
       - key: SDP_ENABLE_UFRN
