@@ -24,6 +24,34 @@ class TraceBuffer:
     end_time: float
 
 
+def normalized_station_activity(score: float, trigger_on: float) -> float:
+    """Map an STA/LTA ratio to display activity without painting normal noise as shaking.
+
+    A quiet STA/LTA trace sits near 1.0.  The old implementation divided the ratio by
+    the trigger threshold, so even ordinary background motion looked active.  Here 1.0
+    maps to zero and the public trigger maps to one.
+    """
+    if not math.isfinite(score):
+        return 0.0
+    span = max(0.001, trigger_on - 1.0)
+    value = max(0.0, min(1.0, (score - 1.0) / span))
+    return value ** 1.25
+
+
+def has_sustained_threshold(values: np.ndarray, threshold: float, required_samples: int) -> bool:
+    """Reject isolated one-sample spikes; require a short continuous onset."""
+    required_samples = max(1, int(required_samples))
+    run = 0
+    for value in values:
+        if float(value) >= threshold:
+            run += 1
+            if run >= required_samples:
+                return True
+        else:
+            run = 0
+    return False
+
+
 class EventAssociator:
     def __init__(self, settings: Settings, state: SystemState) -> None:
         self.settings = settings
@@ -31,10 +59,10 @@ class EventAssociator:
         self._lock = threading.RLock()
         self._picks: list[Pick] = []
         self._active_id: str | None = None
-        self._active_last_pick: float = 0.0
+        self._active_last_pick = 0.0
         self._revision = 0
         self._last_public_event: dict | None = None
-        self._last_revision_epoch: float = 0.0
+        self._last_revision_epoch = 0.0
 
     @staticmethod
     def _distinct_station_count(picks: list[Pick]) -> int:
@@ -44,8 +72,6 @@ class EventAssociator:
         previous = self._last_public_event
         if previous is None:
             return "detecção inicial multiestação"
-
-        # Important state changes are published immediately, even inside the normal debounce.
         if bool(candidate.get("eewEligible")) != bool(previous.get("eewEligible")):
             return "estado EEW alterado"
         if bool(candidate.get("depthResolved")) and not bool(previous.get("depthResolved")):
@@ -87,7 +113,6 @@ class EventAssociator:
         new_conf = int(candidate.get("confidence") or 0)
         if abs(new_conf - old_conf) >= self.settings.revision_confidence_delta:
             return f"confiança revisada ({old_conf}%→{new_conf}%)"
-
         if elapsed >= self.settings.revision_max_silence_seconds:
             return "atualização periódica da solução"
         return None
@@ -97,21 +122,19 @@ class EventAssociator:
             window = self.settings.association_window_seconds
             self._picks = [p for p in self._picks if pick.time - p.time <= window]
 
-            # One best pick for each station/phase in the current association window.
             new_key = (pick.station_key, pick.phase)
             old_same = [p for p in self._picks if (p.station_key, p.phase) == new_key]
             self._picks = [p for p in self._picks if (p.station_key, p.phase) != new_key]
             if old_same:
                 old = max(old_same, key=lambda p: p.probability)
-                if old.probability > pick.probability and abs(old.time - pick.time) < 5:
-                    self._picks.append(old)
-                else:
-                    self._picks.append(pick)
+                self._picks.append(
+                    old
+                    if old.probability > pick.probability and abs(old.time - pick.time) < 5
+                    else pick
+                )
             else:
                 self._picks.append(pick)
 
-            # Raw station shaking is intentionally more sensitive than public event creation.
-            # Three stations are enough only to test an internal candidate solution.
             if self._distinct_station_count(self._picks) < self.settings.min_stations:
                 return
 
@@ -136,7 +159,10 @@ class EventAssociator:
             gap_quality = max(0.0, min(1.0, (360.0 - result.azimuthal_gap_deg) / 220.0))
             pick_quality = sum(p.probability for p in used) / max(len(used), 1)
             median_latency = float(np.median([p.latency_seconds for p in used])) if used else 999.0
-            latency_quality = max(0.0, 1.0 - median_latency / max(self.settings.max_data_latency_seconds, 1.0))
+            latency_quality = max(
+                0.0,
+                1.0 - median_latency / max(self.settings.max_data_latency_seconds, 1.0),
+            )
             outlier_penalty = min(0.25, 0.05 * len(result.outlier_pick_ids))
             confidence = round(
                 100
@@ -153,12 +179,9 @@ class EventAssociator:
 
             latest_pick_time = max(p.time for p in used)
             origin_age = latest_pick_time - result.origin_time
-
-            # SREV/REV distinguishes shaking detection from its low-accuracy epicenter-detection
-            # overlay. We do the same here: a STA/LTA-only solution must pass a much stricter public
-            # gate than a solution supported by a real phase picker such as PhaseNet.
             picker_set = {str(p.picker or "").lower() for p in used}
             stalta_only = bool(used) and picker_set.issubset({"stalta"})
+
             public_required = max(self.settings.min_stations, self.settings.public_min_stations)
             public_rms = self.settings.public_max_rms_seconds
             public_gap = self.settings.public_max_azimuthal_gap_deg
@@ -190,12 +213,8 @@ class EventAssociator:
 
             phases = {"P": 0, "S": 0}
             for p in used:
-                phase = "S" if p.phase.upper().startswith("S") else "P"
-                phases[phase] += 1
+                phases["S" if p.phase.upper().startswith("S") else "P"] += 1
 
-            # Wavefronts are a stronger claim than a shaking marker or even a preliminary
-            # hypocenter. Require low latency plus reliable phase identification. In fallback
-            # STA/LTA mode we need an even larger multi-station quorum before P/S rings appear.
             low_latency_used = [
                 p for p in used if p.latency_seconds <= self.settings.eew_max_pick_latency_seconds
             ]
@@ -214,15 +233,20 @@ class EventAssociator:
                 )
             else:
                 phase_gate = (
-                    reliable_phase_station_count >= self.settings.wave_min_reliable_phase_stations
+                    reliable_phase_station_count
+                    >= self.settings.wave_min_reliable_phase_stations
                 )
 
             eew_eligible = low_latency_station_count >= public_required and phase_gate
             status = "automatic_preliminary" if eew_eligible else "automatic_validated"
             if eew_eligible:
-                status_label = "Detecção automática preliminar · fases e latência compatíveis com EEW experimental"
+                status_label = (
+                    "Detecção automática preliminar · fases e latência compatíveis com EEW experimental"
+                )
             elif stalta_only:
-                status_label = "Agitação multiestação validada · hipocentro preliminar de baixa confiança instrumental"
+                status_label = (
+                    "Agitação multiestação validada · hipocentro preliminar de baixa confiança instrumental"
+                )
             else:
                 status_label = "Hipocentro automático validado · sem quórum suficiente para ondas EEW"
 
@@ -268,7 +292,6 @@ class EventAssociator:
             reason = self._revision_reason(candidate, now)
             if reason is None:
                 return
-
             self._revision += 1
             candidate["revision"] = self._revision
             candidate["revisionReason"] = reason
@@ -294,7 +317,6 @@ class WaveformProcessor:
         self._lock = threading.RLock()
 
     def add_external_pick(self, pick: Pick) -> None:
-        """Entry point for optional ML pickers (PhaseNet/SeisBench worker)."""
         self.state.add_pick(
             {
                 "station": pick.station_key,
@@ -308,7 +330,9 @@ class WaveformProcessor:
                 "source": pick.source,
             }
         )
-        self.state.mark_trigger(pick.station_key, pick.time, pick.score, pick.phase, pick.picker)
+        self.state.mark_trigger(
+            pick.station_key, pick.time, pick.score, pick.phase, pick.picker
+        )
         self.associator.add(pick)
 
     def on_trace(self, trace: Trace, source_key: str) -> None:
@@ -317,17 +341,18 @@ class WaveformProcessor:
         station = self.stations.get(key)
         if station is None:
             return
+
         data = np.asarray(trace.data, dtype=np.float64)
         if data.size < 2 or not np.isfinite(data).all():
             return
         fs = float(trace.stats.sampling_rate)
         if fs < 10:
             return
+
         end_time = float(trace.stats.endtime.timestamp)
         received_time = time.time()
         latency = max(0.0, received_time - end_time)
 
-        # Keep network telemetry for every component, even if it is too old to be EEW-useful.
         tele_key = f"{key}:{channel}"
         last_telemetry = self._last_telemetry.get(tele_key, 0.0)
         if received_time - last_telemetry >= 1.0:
@@ -341,20 +366,22 @@ class WaveformProcessor:
                 channel=channel,
             )
 
-        # Classic lightweight picker is vertical-component only. Horizontal data remain available
-        # to the optional PhaseNet worker and future S-wave algorithms. A vertical STA/LTA trigger
-        # is treated as a sensitive P candidate, not as a high-confidence phase classification.
+        # The lightweight fallback uses only Z. Horizontals remain available for PhaseNet.
         if not channel.endswith("Z"):
             return
 
         stream_key = f"{key}:{channel}"
         with self._lock:
             existing = self._buffers.get(stream_key)
-            if existing is None or abs(existing.sample_rate - fs) > 0.01 or end_time < existing.end_time:
+            if (
+                existing is None
+                or abs(existing.sample_rate - fs) > 0.01
+                or end_time < existing.end_time
+            ):
                 merged = data
             else:
                 merged = np.concatenate((existing.data, data))
-            keep = int(max(20.0, self.settings.lta_seconds * 3.0) * fs)
+            keep = int(max(40.0, self.settings.lta_seconds * 3.0) * fs)
             merged = merged[-keep:]
             self._buffers[stream_key] = TraceBuffer(fs, merged, end_time)
 
@@ -365,8 +392,8 @@ class WaveformProcessor:
         try:
             work = detrend(merged, type="linear")
             nyquist = fs / 2.0
-            high = min(12.0, nyquist * 0.80)
-            low = 0.8
+            low = max(0.05, self.settings.filter_low_hz)
+            high = min(self.settings.filter_high_hz, nyquist * 0.80)
             if high <= low:
                 return
             sos = butter(3, [low, high], btype="bandpass", fs=fs, output="sos")
@@ -377,6 +404,7 @@ class WaveformProcessor:
         except Exception:
             return
 
+        # Evaluate the last 1.5 seconds, but do not accept a lone numerical spike.
         lookback = max(1, int(1.5 * fs))
         recent = cft[-lookback:]
         if recent.size == 0:
@@ -386,8 +414,8 @@ class WaveformProcessor:
         peak_index = cft.size - lookback + local_index
         seconds_before_end = (cft.size - 1 - peak_index) / fs
         pick_time = end_time - seconds_before_end
-        activity = score / max(self.settings.trigger_on, 0.001)
 
+        activity = normalized_station_activity(score, self.settings.trigger_on)
         self.state.touch_station(
             key,
             end_time,
@@ -397,31 +425,42 @@ class WaveformProcessor:
             channel=channel,
         )
 
-        # Extremely stale chunks should never create a fresh alarm. They still appear as telemetry.
         if latency > self.settings.max_data_latency_seconds:
             return
 
+        required_samples = max(
+            1, int(math.ceil(self.settings.trigger_persist_seconds * fs))
+        )
+        sustained = has_sustained_threshold(
+            recent, self.settings.trigger_on, required_samples
+        )
         last_trigger = self._last_trigger.get(key, 0.0)
-        if score >= self.settings.trigger_on and pick_time - last_trigger >= self.settings.refractory_seconds:
+
+        if (
+            sustained
+            and score >= self.settings.trigger_on
+            and pick_time - last_trigger >= self.settings.refractory_seconds
+        ):
             self._last_trigger[key] = pick_time
-            # Convert STA/LTA strength to a bounded heuristic confidence; this is deliberately NOT
-            # treated as a calibrated P probability. The stricter STA/LTA-only public gate above
-            # absorbs that uncertainty.
             excess = max(0.0, score - self.settings.trigger_on)
             probability = 0.50 + 0.48 * (1.0 - math.exp(-excess / 3.0))
-            pick = Pick(
-                station_key=key,
-                time=pick_time,
-                latitude=station.latitude,
-                longitude=station.longitude,
-                score=score,
-                source=source_key,
-                phase="P",
-                probability=probability,
-                latency_seconds=latency,
-                picker="stalta",
+            self.add_external_pick(
+                Pick(
+                    station_key=key,
+                    time=pick_time,
+                    latitude=station.latitude,
+                    longitude=station.longitude,
+                    score=score,
+                    source=source_key,
+                    phase="P",
+                    probability=probability,
+                    latency_seconds=latency,
+                    picker="stalta",
+                )
             )
-            self.add_external_pick(pick)
-        elif score <= self.settings.trigger_off and self.state.stations.get(key, {}).get("triggered"):
-            if end_time - last_trigger > 3.0:
-                self.state.clear_trigger(key)
+        elif (
+            score <= self.settings.trigger_off
+            and self.state.stations.get(key, {}).get("triggered")
+            and end_time - last_trigger > 3.0
+        ):
+            self.state.clear_trigger(key)
