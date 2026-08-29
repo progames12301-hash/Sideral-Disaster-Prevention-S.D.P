@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/shindo.css">
   <link rel="stylesheet" href="/static/stations.css">
+  <link rel="stylesheet" href="/static/test-mode.css">
 </head>
 <body>
   <div id="app">
@@ -128,6 +129,7 @@
         <small id="lastUpdate">iniciando</small>
       </div>
       <div class="map-tools">
+        <button id="testRJ" type="button" title="Simulação local temporária com estações próximas ao RJ">TESTE RJ</button>
         <button id="fitBrazil" type="button" title="Voltar ao Brasil">BR</button>
         <button id="toggleStations" type="button" class="active" title="Mostrar/ocultar estações">●</button>
       </div>
@@ -141,6 +143,7 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="/static/rj-test.js"></script>
   <script src="/static/runtime-config.js"></script>
   <script src="/static/app.js"></script>
   <script src="/static/local-clock.js"></script>
