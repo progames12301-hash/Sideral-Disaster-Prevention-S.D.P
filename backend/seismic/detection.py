@@ -44,13 +44,13 @@ def station_activity_level(score: float, trigger_on: float) -> int:
         return 0
     trigger = max(2.0, float(trigger_on))
     thresholds = (
-        1.35,
-        1.70,
-        2.20,
-        3.00,
-        4.00,
+        2.60,
+        3.30,
+        4.10,
+        5.00,
+        6.20,
         trigger,
-        trigger * 1.45,
+        trigger * 1.35,
     )
     level = 0
     for threshold in thresholds:
@@ -73,6 +73,34 @@ def has_sustained_threshold(values: np.ndarray, threshold: float, required_sampl
         else:
             run = 0
     return False
+
+
+def sustained_station_activity_level(
+    values: np.ndarray,
+    trigger_on: float,
+    sample_rate: float,
+    trigger_persist_seconds: float,
+    display_persist_seconds: float = 0.45,
+) -> int:
+    """Return 0 for background motion and 1..7 only for sustained significant motion.
+
+    Every displayed level has a persistence requirement. Levels 6 and 7 use the
+    full detector persistence window, so a short cultural/noise spike cannot paint
+    a station as an extreme signal.
+    """
+    if values.size == 0 or sample_rate <= 0:
+        return 0
+    trigger = max(2.0, float(trigger_on))
+    thresholds = (2.60, 3.30, 4.10, 5.00, 6.20, trigger, trigger * 1.35)
+    level = 0
+    for index, threshold in enumerate(thresholds, start=1):
+        persist = trigger_persist_seconds if index >= 6 else display_persist_seconds
+        required = max(1, int(math.ceil(max(0.05, persist) * sample_rate)))
+        if has_sustained_threshold(values, threshold, required):
+            level = index
+        else:
+            break
+    return level
 
 
 class EventAssociator:
@@ -445,12 +473,16 @@ class WaveformProcessor:
             recent, self.settings.trigger_on, required_samples
         )
 
-        activity = normalized_station_activity(score, self.settings.trigger_on)
-        raw_level = station_activity_level(score, self.settings.trigger_on)
-        # Levels 6/7 are warning states, not instantaneous amplitude colors.
-        # A short STA/LTA spike may look large numerically but must stay <=5 until
-        # it survives the same persistence gate used by the real trigger.
-        level = raw_level if sustained else min(raw_level, 5)
+        # Display levels are intentionally stricter than raw STA/LTA peaks. Background
+        # and ordinary oscillation stay at 0. A level appears only after the signal
+        # remains above that level's threshold for a minimum duration.
+        level = sustained_station_activity_level(
+            recent,
+            self.settings.trigger_on,
+            fs,
+            self.settings.trigger_persist_seconds,
+        )
+        activity = level / 7.0
         self.state.touch_station(
             key,
             end_time,

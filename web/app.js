@@ -82,7 +82,7 @@
 
     const score = Number(st?.activityScore);
     if (Number.isFinite(score)) {
-      const thresholds = [1.35, 1.70, 2.20, 3.00, 4.00, 6.175, 8.954];
+      const thresholds = [2.60, 3.30, 4.10, 5.00, 6.20, 8.50, 11.475];
       let level = 0;
       for (const threshold of thresholds) {
         if (score >= threshold) level += 1;
