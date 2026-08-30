@@ -1,43 +1,48 @@
-/* S.D.P station activity palette
-   Activity is a relative STA/LTA signal indicator, not seismic intensity.
-   Normal background/noise stays blue. Colors only warm as the station
-   approaches the conservative trigger threshold. */
+/* S.D.P station signal levels — deterministic 0..7.
+   These are STA/LTA activity classes, not Shindo, magnitude or network latency. */
 .station-marker {
-  width: 11px;
-  height: 11px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
   background: #2f80ed;
-  border: 1px solid #b7dcff;
+  border: 1px solid #d7ecff;
   box-shadow: 0 0 0 2px rgba(5,15,28,.45);
-  transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease, opacity .16s ease;
+  color: #fff;
+  font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-shadow: 0 1px 2px rgba(0,0,0,.8);
+  transition: background-color .14s ease, border-color .14s ease, box-shadow .14s ease, transform .14s ease, opacity .14s ease;
+}
+
+.station-marker span {
+  pointer-events: none;
+  transform: translateY(.2px);
 }
 
 .station-marker.offline {
-  opacity: .32;
+  opacity: .35;
   background: #31537b;
   border-color: #7890aa;
 }
 
-/* 0–2 are intentionally blue: ordinary microseismic/cultural noise should
-   not make the national map look like it is constantly shaking. */
-.station-marker.online.activity-0 { background: #2f80ed; border-color: #b7dcff; }
-.station-marker.online.activity-1 { background: #2f80ed; border-color: #b7dcff; }
-.station-marker.online.activity-2 { background: #2997e8; border-color: #c0e5ff; }
+/* One fixed palette. A given level always has the same color. */
+.station-marker.online.activity-0 { background: #2f80ed; border-color: #c9e4ff; }
+.station-marker.online.activity-1 { background: #3f9df1; border-color: #d2ebff; }
+.station-marker.online.activity-2 { background: #22b8cf; border-color: #d2f7ff; }
+.station-marker.online.activity-3 { background: #35b96f; border-color: #dcffe9; }
+.station-marker.online.activity-4 { background: #d2b52f; border-color: #fff0a6; }
+.station-marker.online.activity-5 { background: #e88b2f; border-color: #ffdfb3; }
+.station-marker.online.activity-6 { background: #df493f; border-color: #ffc8c3; }
+.station-marker.online.activity-7 { background: #b82f62; border-color: #ffd0df; }
 
-/* Increasing signal-to-noise response. */
-.station-marker.online.activity-3 { background: #20b8d8; border-color: #c9f5ff; }
-.station-marker.online.activity-4 { background: #39c878; border-color: #d1ffe5; }
-.station-marker.online.activity-5 { background: #f0c735; border-color: #fff1a6; }
-.station-marker.online.activity-6 { background: #ef493d; border-color: #ffc1bc; }
-
-/* A trigger gets emphasis, but its actual color still comes from activity. */
 .station-marker.triggered {
-  transform: scale(1.28);
-  box-shadow: 0 0 0 3px rgba(255,255,255,.18), 0 0 15px rgba(255,255,255,.55);
+  transform: scale(1.18);
+  box-shadow: 0 0 0 3px rgba(255,255,255,.18), 0 0 14px rgba(255,255,255,.48);
 }
 
-/* Latency remains available in telemetry/tooltips and must not recolor a
-   station as if network delay were ground motion. */
+/* Latency is telemetry only; it never recolors a station as shaking. */
 .station-marker.online.latency-delayed,
 .station-marker.online.latency-late,
 .station-marker.online.latency-stale {
