@@ -86,8 +86,8 @@ def parse_cires_detail(document: str, source_url: str = CIRES_HOME) -> dict[str,
             origin_epoch = None
 
     magnitude = _number(r"Mag(?:nitud)?\s+(?:Inicial\s+)?Preliminar\s*[:\-]?\s*([0-9]+(?:[.,][0-9]+)?)", text)
-    lat = _number(r"Latitud\s*[:\-]?\s*(-?[0-9]+(?:[.,][0-9]+)?)", text)
-    lon = _number(r"Longitud\s*[:\-]?\s*(-?[0-9]+(?:[.,][0-9]+)?)", text)
+    lat = _number(r"Latitud\s*:?\s*(-?[0-9]+(?:[.,][0-9]+)?)", text)
+    lon = _number(r"Longitud\s*:?\s*(-?[0-9]+(?:[.,][0-9]+)?)", text)
     depth = _number(r"Profundidad\s*(?:\(Km\))?\s*[:\-]?\s*([0-9]+(?:[.,][0-9]+)?)", text)
     station_match = re.search(r"inicialmente\s+en\s+(\d+)\s+estaciones", text, re.I)
     station_count = int(station_match.group(1)) if station_match else None
