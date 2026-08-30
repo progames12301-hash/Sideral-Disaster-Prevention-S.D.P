@@ -3,21 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>S.D.P México | CIRES / SASMEX</title>
+  <title>S.D.P México | CIRES / SASMEX + Tempo Real</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <link rel="stylesheet" href="./web/international.css">
 </head>
 <body data-country="mexico">
 <div class="intl-app">
   <aside class="intl-panel">
-    <div class="intl-brand"><div class="intl-logo">S.D.P</div><div><strong>Sideral Disaster Prevention</strong><span>Earthquake Early Warning · <b id="countryLabel">México</b></span></div></div>
+    <div class="intl-brand"><div class="intl-logo">S.D.P</div><div><strong>Sideral Disaster Prevention</strong><span>Earthquake Monitoring · <b id="countryLabel">México</b></span></div></div>
     <nav class="country-nav"><a href="./index.html">BRASIL</a><a class="active" href="./mexico.html">MÉXICO</a><a href="./japan.html">JAPÃO</a></nav>
-    <section class="source-card"><span class="eyebrow">FONTES</span><div class="source-row"><strong id="sourceName">CIRES / SASMEX</strong><span class="badge">OFICIAL</span></div><p id="sourceMode" class="source-mode">Inicializando CIRES e estações…</p><small id="sourceUpdated">iniciando</small><div id="sourceError" class="source-error"></div></section>
-    <section class="event-card"><span class="eyebrow">EVENTO MAIS RECENTE</span><div id="eventStatus" class="status">Sem evento oficial ativo</div><div id="eventPlace" class="event-place">Aguardando fonte</div><div id="eventTime" class="event-time">—</div><div class="metrics"><div class="metric"><span>MAGNITUDE</span><strong id="magnitude">—</strong><small id="magnitudeMeta">—</small></div><div class="metric"><span>PROFUNDIDADE</span><strong id="depth">—</strong></div><div class="metric"><span>INTENSIDADE</span><strong id="intensity">—</strong><small>quando publicada</small></div><div class="metric"><span>ESTAÇÕES</span><strong id="stationCount">—</strong><small>rede exibida / evento</small></div></div></section>
-    <section class="level-card"><span class="eyebrow">NÍVEL DE ESTAÇÃO S.D.P</span><div class="level-scale"><span class="l0">0</span><span class="l1">1</span><span class="l2">2</span><span class="l3">3</span><span class="l4">4</span><span class="l5">5</span><span class="l6">6</span><span class="l7">7</span></div><p id="stationNote" class="station-note">Carregando inventário público de estações no México…</p></section>
-    <p class="station-note">O alerta oficial continua vindo do CIRES/SASMEX. As estações adicionais mostradas são apenas posições de redes públicas acessíveis, identificadas pela fonte; elas permanecem em 0 até existir um stream de movimento permitido e compatível. Não são apresentadas como sensores privados do SASMEX.</p>
+    <section class="source-card"><span class="eyebrow">FONTES</span><div class="source-row"><strong id="sourceName">CIRES / SASMEX + S.D.P</strong><span class="badge">TEMPO REAL</span></div><p id="sourceMode" class="source-mode">Inicializando CIRES e estações…</p><small id="sourceUpdated">iniciando</small><div id="sourceError" class="source-error"></div></section>
+    <section class="event-card"><span class="eyebrow">EVENTO MAIS RECENTE</span><div id="eventStatus" class="status">Nenhum evento ativo</div><div id="eventPlace" class="event-place">Monitoramento em tempo real</div><div id="eventTime" class="event-time">—</div><div class="metrics"><div class="metric"><span>MAGNITUDE</span><strong id="magnitude">—</strong><small id="magnitudeMeta">—</small></div><div class="metric"><span>PROFUNDIDADE</span><strong id="depth">—</strong></div><div class="metric"><span>INTENSIDADE</span><strong id="intensity">—</strong><small>quando publicada</small></div><div class="metric"><span>ESTAÇÕES</span><strong id="stationCount">—</strong><small>rede usada no evento</small></div></div></section>
+    <section class="level-card"><span class="eyebrow">NÍVEL DE ESTAÇÃO S.D.P</span><div class="level-scale"><span class="l0">0</span><span class="l1">1</span><span class="l2">2</span><span class="l3">3</span><span class="l4">4</span><span class="l5">5</span><span class="l6">6</span><span class="l7">7</span></div><p id="stationNote" class="station-note">Inicializando movimento das estações…</p></section>
+    <p class="station-note">O movimento das redes sísmicas públicas é processado pelo S.D.P em tempo real. CIRES/SASMEX permanece identificado separadamente como a fonte oficial de alerta sísmico mexicano.</p>
   </aside>
-  <main class="intl-map-shell"><div id="intlMap" class="intl-map"></div><div class="map-overlay"><strong id="mapStatus">MONITOR OFICIAL</strong><span>CIRES/SASMEX para alerta; inventário público para estações visíveis.</span></div><div class="wave-legend"><span><i class="dot p"></i>P</span><span><i class="dot s"></i>S</span><span><i class="dot e"></i>Epicentro</span></div></main>
+  <main class="intl-map-shell"><div id="intlMap" class="intl-map"></div><div class="map-overlay"><strong id="mapStatus">MONITORAMENTO SÍSMICO EM TEMPO REAL</strong><span>Níveis 0–7 vêm do sinal; hipocentro automático só aparece após associação multiestação.</span></div><div class="wave-legend"><span><i class="dot p"></i>P</span><span><i class="dot s"></i>S</span><span><i class="dot e"></i>Epicentro</span></div></main>
 </div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script src="./web/runtime-config.js"></script>
