@@ -16,6 +16,44 @@
     }
   }
 
+  // A single STA/LTA peak can be very high even when it lasts only a fraction of a
+  // second. The detector already requires a sustained onset before `triggered=true`;
+  // mirror that rule in the map so short cultural/noise spikes cannot flash 6 or 7.
+  // Levels 6-7 are therefore reserved for stations that actually passed the sustained
+  // station trigger. A non-triggered transient may rise through 0-5, but never 6/7.
+  function guardStationMarker(root) {
+    const nodes = [];
+    if (root?.nodeType === 1 && root.matches?.('.station-marker')) nodes.push(root);
+    root?.querySelectorAll?.('.station-marker').forEach(node => nodes.push(node));
+    for (const node of nodes) {
+      if (node.classList.contains('triggered')) continue;
+      let level = null;
+      for (const cls of node.classList) {
+        const match = /^activity-([0-7])$/.exec(cls);
+        if (match) {
+          level = Number(match[1]);
+          break;
+        }
+      }
+      if (level == null || level <= 5) continue;
+      node.classList.remove(`activity-${level}`);
+      node.classList.add('activity-5');
+      node.dataset.rawActivityLevel = String(level);
+      const label = node.querySelector('span');
+      if (label) label.textContent = '5';
+    }
+  }
+
+  if (document.body && 'MutationObserver' in window) {
+    const observer = new MutationObserver(mutations => {
+      for (const mutation of mutations) {
+        mutation.addedNodes.forEach(node => guardStationMarker(node));
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    queueMicrotask(() => guardStationMarker(document.body));
+  }
+
   const queryBase = normalize(queryApi);
   if (queryBase) localStorage.setItem('sdp-api-base', queryBase);
 
