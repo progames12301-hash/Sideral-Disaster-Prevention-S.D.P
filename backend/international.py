@@ -14,6 +14,8 @@ from urllib.parse import urljoin
 
 import requests
 
+from backend.international_inventory import fetch_jma_station_inventory, fetch_mexico_station_inventory
+
 
 CIRES_HOME = os.getenv("SDP_CIRES_URL", "https://www.cires.org.mx/")
 JMA_QUAKE_LIST = os.getenv("SDP_JMA_QUAKE_LIST", "https://www.jma.go.jp/bosai/quake/data/list.json")
@@ -256,6 +258,9 @@ class InternationalState:
                 "event": None,
                 "stations": [],
                 "stationStreamAvailable": False,
+                "stationMetadataAvailable": False,
+                "stationSource": None,
+                "stationError": None,
                 "lastUpdate": None,
                 "error": None,
             },
@@ -267,6 +272,9 @@ class InternationalState:
                 "event": None,
                 "stations": [],
                 "stationStreamAvailable": False,
+                "stationMetadataAvailable": False,
+                "stationSource": None,
+                "stationError": None,
                 "lastUpdate": None,
                 "error": None,
             },
@@ -352,10 +360,43 @@ class JapanJmaWatcher(_Watcher):
         return None
 
 
+class StationInventoryWatcher(threading.Thread):
+    def __init__(self, state: InternationalState, stop_event: threading.Event, country: str) -> None:
+        super().__init__(name=f"international-stations-{country}", daemon=True)
+        self.state = state
+        self.stop_event = stop_event
+        self.country = country
+        self.session = requests.Session()
+        self.session.headers.update({"User-Agent": USER_AGENT, "Accept": "text/plain,text/html,*/*"})
+
+    def run(self) -> None:
+        while not self.stop_event.is_set():
+            try:
+                if self.country == "japan":
+                    stations = fetch_jma_station_inventory(self.session)
+                    source = "JMA seismic-intensity stations"
+                else:
+                    stations = fetch_mexico_station_inventory(self.session)
+                    source = "Raspberry Shake public stations in Mexico"
+                self.state.update(
+                    self.country,
+                    stations=stations,
+                    stationMetadataAvailable=bool(stations),
+                    stationStreamAvailable=False,
+                    stationSource=source,
+                    stationError=None,
+                )
+            except Exception as exc:
+                self.state.update(self.country, stationError=str(exc)[:240])
+            self.stop_event.wait(21600.0)
+
+
 def start_international_watchers(state: InternationalState, stop_event: threading.Event) -> list[threading.Thread]:
     watchers: list[threading.Thread] = [
         MexicoCiresWatcher(state, stop_event),
         JapanJmaWatcher(state, stop_event),
+        StationInventoryWatcher(state, stop_event, "mexico"),
+        StationInventoryWatcher(state, stop_event, "japan"),
     ]
     for watcher in watchers:
         watcher.start()

@@ -145,7 +145,7 @@ async def lifespan(app: FastAPI):
     task.cancel()
 
 
-app = FastAPI(title="Sideral Disaster Prevention — S.D.P", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="Sideral Disaster Prevention — S.D.P", version="0.4.1", lifespan=lifespan)
 
 _default_origins = (
     "https://progames12301-hash.github.io,"
@@ -173,7 +173,7 @@ def health() -> dict:
     streaming = [s for s in enabled if s.get("state") == "streaming"]
     return {
         "ok": True,
-        "version": "0.4.0",
+        "version": "0.4.1",
         "time": utc_iso(),
         "enabledSources": len(enabled),
         "streamingSources": len(streaming),
@@ -190,7 +190,7 @@ def health() -> dict:
 
 @app.get("/api/live")
 def live() -> dict:
-    return {"ok": True, "version": "0.4.0", "time": utc_iso()}
+    return {"ok": True, "version": "0.4.1", "time": utc_iso()}
 
 
 @app.get("/api/ready")
@@ -221,7 +221,7 @@ def network_latency() -> dict:
 def api_state() -> dict:
     payload = state.snapshot()
     payload["config"] = {
-        "version": "0.4.0",
+        "version": "0.4.1",
         "pVelocityKmS": settings.p_velocity_km_s,
         "sVelocityKmS": settings.s_velocity_km_s,
         "minStations": settings.min_stations,
