@@ -2,8 +2,8 @@
   const root = document.documentElement;
   const country = String(root.dataset.country || document.body.dataset.country || '').toLowerCase();
   const profiles = {
-    mexico: { label: 'México', center: [23.4, -102.2], zoom: 5, source: 'CIRES / SASMEX' },
-    japan: { label: 'Japão', center: [36.2, 138.1], zoom: 5, source: 'JMA' }
+    mexico: { label: 'México', center: [23.4, -102.2], zoom: 5, source: 'CIRES / SASMEX + S.D.P' },
+    japan: { label: 'Japão', center: [36.2, 138.1], zoom: 5, source: 'JMA + S.D.P' }
   };
   const profile = profiles[country];
   if (!profile) return;
@@ -63,13 +63,20 @@
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
       const level = Math.max(0, Math.min(7, Math.round(Number(st.level ?? st.activityLevel ?? 0))));
       const live = st.live === true;
+      const observed = st.observed === true;
       const icon = L.divIcon({
         className: '',
-        html: `<div class="station-marker${live ? ' live' : ' metadata'}" style="background:${stationColor(level)}"><span>${level}</span></div>`,
+        html: `<div class="station-marker${live ? ' live' : observed ? ' observed' : ' metadata'}" style="background:${stationColor(level)}"><span>${level}</span></div>`,
         iconSize: [18,18], iconAnchor: [9,9]
       });
       const source = st.source ? ` · ${st.source}` : '';
-      const mode = live ? `nível ${level}` : 'nível 0 · posição real, sem stream de movimento';
+      let mode = 'nível 0 · estação cadastrada';
+      if (live) {
+        const latency = Number.isFinite(Number(st.latencySeconds)) ? ` · ${Number(st.latencySeconds).toFixed(1)} s` : '';
+        mode = `TEMPO REAL · nível ${level}${latency}`;
+      } else if (observed) {
+        mode = `JMA observado · Shindo ${st.observedShindo || level} · nível ${level}`;
+      }
       L.marker([lat, lon], { icon })
         .bindTooltip(`${st.name || st.key || 'Estação'} · ${mode}${source}`)
         .addTo(stationLayer);
@@ -83,8 +90,8 @@
     sCircle = null;
 
     if (!event) {
-      els.eventStatus.textContent = 'Sem evento oficial ativo';
-      els.eventPlace.textContent = 'Aguardando fonte';
+      els.eventStatus.textContent = 'Nenhum evento ativo';
+      els.eventPlace.textContent = 'Monitoramento em tempo real';
       els.eventTime.textContent = '—';
       els.magnitude.textContent = '—';
       els.magnitudeMeta.textContent = '—';
@@ -95,10 +102,10 @@
     }
 
     els.eventStatus.textContent = event.statusLabel || event.status || 'Evento';
-    els.eventPlace.textContent = event.area || (event.lat != null && event.lon != null ? `${Number(event.lat).toFixed(3)}°, ${Number(event.lon).toFixed(3)}°` : 'Localização não publicada');
+    els.eventPlace.textContent = event.area || (event.lat != null && event.lon != null ? `${Number(event.lat).toFixed(3)}°, ${Number(event.lon).toFixed(3)}°` : 'Localização em processamento');
     els.eventTime.textContent = fmtTime(event.originEpoch, event.originTime);
     els.magnitude.textContent = event.magnitude != null ? Number(event.magnitude).toFixed(1) : '—';
-    els.magnitudeMeta.textContent = event.magnitudeType || '—';
+    els.magnitudeMeta.textContent = event.magnitudeType || (event.official ? 'fonte oficial' : 'detecção S.D.P');
     els.depth.textContent = event.depthKm != null ? `${Number(event.depthKm).toFixed(0)} km` : '—';
     els.intensity.textContent = event.maxIntensity || '—';
     els.stationCount.textContent = event.stationCount ?? currentStations.length ?? '—';
@@ -134,13 +141,15 @@
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const stations = Array.isArray(data.stations) ? data.stations : [];
+      const liveCount = Number(data.liveStationCount || stations.filter(st => st.live === true).length || 0);
+      const observedCount = Number(data.observedStationCount || stations.filter(st => st.observed === true).length || 0);
+      const streamSources = Array.isArray(data.streamSources) ? data.streamSources : [];
+      const streaming = streamSources.filter(src => src.state === 'streaming').length;
 
       if (country === 'japan') {
-        els.sourceMode.textContent = data.mode === 'official-eew'
-          ? 'JMA EEW oficial + inventário de estações JMA'
-          : 'JMA oficial · terremotos + inventário real de estações; EEW instantâneo aguarda feed autorizado';
+        els.sourceMode.textContent = `JMA oficial + waveform sísmico público em tempo real · ${streaming} stream ativo${streaming === 1 ? '' : 's'}`;
       } else {
-        els.sourceMode.textContent = 'CIRES/SASMEX oficial + inventário público de estações sísmicas no México';
+        els.sourceMode.textContent = `CIRES/SASMEX oficial + waveform de redes sísmicas públicas · ${streaming} stream ativo${streaming === 1 ? '' : 's'}`;
       }
 
       els.sourceUpdated.textContent = data.lastUpdate ? `atualizado ${new Date(data.lastUpdate).toLocaleTimeString('pt-BR')}` : 'iniciando';
@@ -148,17 +157,20 @@
       els.sourceError.textContent = errors.join(' · ');
       els.sourceError.classList.toggle('show', errors.length > 0);
 
-      if (data.stationStreamAvailable) {
-        els.stationNote.textContent = `${stations.length} estações com sinal em tempo real. 0 = repouso; 1–7 apenas quando o movimento cresce de forma significativa.`;
-      } else if (data.stationMetadataAvailable || stations.length) {
-        els.stationNote.textContent = `${stations.length} estações reais carregadas (${data.stationSource || 'inventário público'}). Por enquanto ficam em 0 porque ainda não existe stream de movimento compatível ligado ao S.D.P; nenhum nível é inventado.`;
-      } else {
-        els.stationNote.textContent = 'Carregando o inventário real de estações. Nenhuma estação artificial será criada.';
-      }
+      const parts = [`${stations.length} estações reais`, `${liveCount} recebendo movimento agora`];
+      if (country === 'japan' && observedCount) parts.push(`${observedCount} com intensidade JMA observada`);
+      els.stationNote.textContent = `${parts.join(' · ')}. 0 = repouso; 1–7 somente por sinal significativo e sustentado.`;
 
-      els.mapStatus.textContent = data.event?.eewEligible ? 'ALERTA/EEW OFICIAL RECEBIDO' : 'MONITOR OFICIAL · sem EEW ativo';
+      const displayEvent = data.displayEvent || data.detectedEvent || data.event || null;
+      if (data.event?.eewEligible) {
+        els.mapStatus.textContent = country === 'japan' ? 'JMA EEW OFICIAL' : 'ALERTA SASMEX OFICIAL';
+      } else if (data.detectedEvent && displayEvent?.id === data.detectedEvent?.id) {
+        els.mapStatus.textContent = 'DETECÇÃO S.D.P · WAVEFORM MULTIESTAÇÃO';
+      } else {
+        els.mapStatus.textContent = 'MONITORAMENTO SÍSMICO EM TEMPO REAL';
+      }
       renderStations(stations);
-      renderEvent(data.event || null);
+      renderEvent(displayEvent);
     } catch (err) {
       els.sourceError.textContent = `Backend/fonte indisponível: ${err.message}`;
       els.sourceError.classList.add('show');
@@ -166,6 +178,6 @@
   }
 
   refresh();
-  setInterval(refresh, country === 'japan' ? 4000 : 10000);
+  setInterval(refresh, country === 'japan' ? 3000 : 5000);
   animate();
 })();
