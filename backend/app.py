@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.catalog import CatalogWatcher
 from backend.config import settings
+from backend.international import InternationalState, start_international_watchers
 from backend.monitoring import NetworkWatchdog
 from backend.seismic.detection import WaveformProcessor
 from backend.seismic.ml_picker import PhaseNetStreamingPicker
@@ -27,6 +28,7 @@ from backend.state import SystemState, utc_iso
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = BASE_DIR / "web"
 state = SystemState(latency_history_size=settings.latency_history_size)
+international_state = InternationalState()
 stop_event = threading.Event()
 collectors: list[SeedLinkCollector] = []
 clients: set[WebSocket] = set()
@@ -137,12 +139,13 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(dispatcher())
     bootstrap_thread = threading.Thread(target=bootstrap_streaming, name="bootstrap", daemon=True)
     bootstrap_thread.start()
+    start_international_watchers(international_state, stop_event)
     yield
     stop_event.set()
     task.cancel()
 
 
-app = FastAPI(title="Sideral Disaster Prevention — S.D.P", version="0.3.2", lifespan=lifespan)
+app = FastAPI(title="Sideral Disaster Prevention — S.D.P", version="0.4.0", lifespan=lifespan)
 
 _default_origins = (
     "https://progames12301-hash.github.io,"
@@ -170,7 +173,7 @@ def health() -> dict:
     streaming = [s for s in enabled if s.get("state") == "streaming"]
     return {
         "ok": True,
-        "version": "0.3.2",
+        "version": "0.4.0",
         "time": utc_iso(),
         "enabledSources": len(enabled),
         "streamingSources": len(streaming),
@@ -178,12 +181,16 @@ def health() -> dict:
         "networkHealth": snapshot.get("networkHealth", {}),
         "activeEvent": bool(snapshot["currentEvent"]),
         "phasePicker": settings.phase_picker,
+        "international": {
+            "mexico": international_state.snapshot("mexico").get("mode"),
+            "japan": international_state.snapshot("japan").get("mode"),
+        },
     }
 
 
 @app.get("/api/live")
 def live() -> dict:
-    return {"ok": True, "version": "0.3.2", "time": utc_iso()}
+    return {"ok": True, "version": "0.4.0", "time": utc_iso()}
 
 
 @app.get("/api/ready")
@@ -214,7 +221,7 @@ def network_latency() -> dict:
 def api_state() -> dict:
     payload = state.snapshot()
     payload["config"] = {
-        "version": "0.3.2",
+        "version": "0.4.0",
         "pVelocityKmS": settings.p_velocity_km_s,
         "sVelocityKmS": settings.s_velocity_km_s,
         "minStations": settings.min_stations,
@@ -227,6 +234,14 @@ def api_state() -> dict:
         "stationActivityLevels": [0, 1, 2, 3, 4, 5, 6, 7],
     }
     return payload
+
+
+@app.get("/api/international/{country}")
+def international(country: str) -> dict:
+    country = country.strip().lower()
+    if country not in {"mexico", "japan"}:
+        raise HTTPException(status_code=404, detail="Country monitor not found")
+    return international_state.snapshot(country)
 
 
 @app.websocket("/ws")
