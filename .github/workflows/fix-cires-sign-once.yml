@@ -1,0 +1,43 @@
+name: One-time CIRES sign fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-cires-sign-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fix signed CIRES coordinates
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('backend/international.py')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace(r'Latitud\s*[:\-]?\s*(-?[0-9]+(?:[.,][0-9]+)?)', r'Latitud\s*:?\s*(-?[0-9]+(?:[.,][0-9]+)?)')
+          text = text.replace(r'Longitud\s*[:\-]?\s*(-?[0-9]+(?:[.,][0-9]+)?)', r'Longitud\s*:?\s*(-?[0-9]+(?:[.,][0-9]+)?)')
+          p.write_text(text, encoding='utf-8')
+          PY
+      - name: Test parsers
+        run: |
+          pip install -r requirements.txt pytest
+          pytest -q tests/test_international.py
+      - name: Commit fix and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-cires-sign-once.yml
+          git add backend/international.py
+          git commit -m "fix: preserve negative CIRES longitude"
+          git push
