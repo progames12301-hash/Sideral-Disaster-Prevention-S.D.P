@@ -21,6 +21,7 @@ from backend.seismic.detection import WaveformProcessor
 from backend.seismic.ml_picker import PhaseNetStreamingPicker
 from backend.seismic.seedlink import SeedLinkCollector
 from backend.seismic.stations import Station, fetch_source_stations
+from backend.seismic.synthetic_test import run_rj_waveform_test
 from backend.state import SystemState, utc_iso
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -30,6 +31,9 @@ stop_event = threading.Event()
 collectors: list[SeedLinkCollector] = []
 clients: set[WebSocket] = set()
 ml_picker: PhaseNetStreamingPicker | None = None
+station_registry: dict[str, Station] = {}
+_rj_test_lock = threading.Lock()
+_rj_test_last_epoch = 0.0
 
 
 async def dispatcher() -> None:
@@ -47,7 +51,7 @@ async def dispatcher() -> None:
 
 
 def bootstrap_streaming() -> None:
-    global ml_picker
+    global ml_picker, station_registry
     station_groups: dict[str, list[Station]] = {}
     all_stations: dict[str, Station] = {}
 
@@ -91,6 +95,7 @@ def bootstrap_streaming() -> None:
                 stationCount=0,
             )
 
+    station_registry = dict(all_stations)
     processor = WaveformProcessor(settings, state, all_stations)
     ml_picker = PhaseNetStreamingPicker(
         settings=settings,
@@ -137,7 +142,7 @@ async def lifespan(app: FastAPI):
     task.cancel()
 
 
-app = FastAPI(title="Sideral Disaster Prevention — S.D.P", version="0.3.1", lifespan=lifespan)
+app = FastAPI(title="Sideral Disaster Prevention — S.D.P", version="0.3.2", lifespan=lifespan)
 
 _default_origins = (
     "https://progames12301-hash.github.io,"
@@ -165,7 +170,7 @@ def health() -> dict:
     streaming = [s for s in enabled if s.get("state") == "streaming"]
     return {
         "ok": True,
-        "version": "0.3.1",
+        "version": "0.3.2",
         "time": utc_iso(),
         "enabledSources": len(enabled),
         "streamingSources": len(streaming),
@@ -178,7 +183,7 @@ def health() -> dict:
 
 @app.get("/api/live")
 def live() -> dict:
-    return {"ok": True, "version": "0.3.1", "time": utc_iso()}
+    return {"ok": True, "version": "0.3.2", "time": utc_iso()}
 
 
 @app.get("/api/ready")
@@ -209,7 +214,7 @@ def network_latency() -> dict:
 def api_state() -> dict:
     payload = state.snapshot()
     payload["config"] = {
-        "version": "0.3.1",
+        "version": "0.3.2",
         "pVelocityKmS": settings.p_velocity_km_s,
         "sVelocityKmS": settings.s_velocity_km_s,
         "minStations": settings.min_stations,
@@ -219,6 +224,7 @@ def api_state() -> dict:
         "eewMaxPickLatencySeconds": settings.eew_max_pick_latency_seconds,
         "debugSimulator": settings.debug_simulator,
         "seedlinkStallSeconds": settings.seedlink_stall_seconds,
+        "stationActivityLevels": [0, 1, 2, 3, 4, 5, 6, 7],
     }
     return payload
 
@@ -235,6 +241,29 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         clients.discard(websocket)
     except Exception:
         clients.discard(websocket)
+
+
+@app.post("/api/test/rj")
+def test_rj_waveform() -> dict:
+    """Isolated end-to-end test: raw samples only, never injected into operational state."""
+    global _rj_test_last_epoch
+    if len(station_registry) < settings.stalta_public_min_stations:
+        raise HTTPException(status_code=503, detail="Metadados das estações ainda não estão prontos")
+    if not _rj_test_lock.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="Já existe um TESTE RJ em processamento")
+    try:
+        now = time.time()
+        if now - _rj_test_last_epoch < 8.0:
+            raise HTTPException(status_code=429, detail="Aguarde alguns segundos antes de repetir o teste")
+        result = run_rj_waveform_test(settings, station_registry)
+        _rj_test_last_epoch = time.time()
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Falha no teste de waveform: {str(exc)[:220]}") from exc
+    finally:
+        _rj_test_lock.release()
 
 
 @app.post("/api/simulate")
