@@ -7,6 +7,8 @@ on:
       - 'backend/**'
       - 'web/**'
       - 'index.html'
+      - 'mexico.html'
+      - 'japan.html'
       - 'tests/**'
       - 'requirements.txt'
       - 'render.yaml'
@@ -16,6 +18,8 @@ on:
       - 'backend/**'
       - 'web/**'
       - 'index.html'
+      - 'mexico.html'
+      - 'japan.html'
       - 'tests/**'
       - 'requirements.txt'
       - 'render.yaml'
@@ -48,5 +52,6 @@ jobs:
       - run: pytest -q
       - run: node --check web/app.js
       - run: node --check web/rj-test.js
+      - run: node --check web/international.js
       - run: node --check web/runtime-config.js
       - run: node --check web/local-clock.js
