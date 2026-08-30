@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import html as html_lib
 import os
@@ -19,12 +20,13 @@ from backend.international_inventory import fetch_jma_station_inventory, fetch_m
 
 CIRES_HOME = os.getenv("SDP_CIRES_URL", "https://www.cires.org.mx/")
 JMA_QUAKE_LIST = os.getenv("SDP_JMA_QUAKE_LIST", "https://www.jma.go.jp/bosai/quake/data/list.json")
+JMA_QUAKE_DATA_BASE = "https://www.jma.go.jp/bosai/quake/data/"
 JMA_EEW_URL = os.getenv("SDP_JMA_EEW_URL", "").strip()
-USER_AGENT = "Sideral-Disaster-Prevention/0.4 (+research; official-source-adapter)"
+USER_AGENT = "Sideral-Disaster-Prevention/0.5 (+research; official-source-adapter)"
 
 
 def _iso(epoch: float | None = None) -> str:
-    dt = datetime.fromtimestamp(epoch or time.time(), tz=timezone.utc)
+    dt = datetime.fromtimestamp(time.time() if epoch is None else epoch, tz=timezone.utc)
     return dt.isoformat().replace("+00:00", "Z")
 
 
@@ -66,12 +68,6 @@ def _coordinate_triplet(value: str | None) -> tuple[float | None, float | None, 
 
 
 def parse_cires_detail(document: str, source_url: str = CIRES_HOME) -> dict[str, Any] | None:
-    """Parse the public CIRES/SASMEX bulletin page.
-
-    The bulletin can include SSN hypocenter/magnitude values.  We keep the provenance
-    explicit: an alert decision is CIRES/SASMEX, while hypocenter fields shown in a
-    bulletin may be labelled by CIRES as SSN data.
-    """
     text = _text(document)
     if "SASMEX" not in text.upper():
         return None
@@ -156,7 +152,7 @@ def parse_jma_quake_item(item: dict[str, Any]) -> dict[str, Any] | None:
     if origin_epoch is None and lat is None and magnitude is None:
         return None
 
-    area = item.get("anm") or item.get("en_anm") or item.get("ttl") or "Japon"
+    area = item.get("anm") or item.get("en_anm") or item.get("ttl") or "Japão"
     max_intensity = item.get("maxi") or None
     return {
         "id": _stable_id("jma", origin, cod, magnitude),
@@ -166,7 +162,6 @@ def parse_jma_quake_item(item: dict[str, Any]) -> dict[str, Any] | None:
         "status": "jma_earthquake_information",
         "statusLabel": "Informação oficial de terremoto JMA",
         "official": True,
-        # The public quake list is post-event information, not the JMA EEW telegram.
         "eewEligible": False,
         "waveEligible": False,
         "originEpoch": origin_epoch,
@@ -184,6 +179,86 @@ def parse_jma_quake_item(item: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _jma_level(value: Any) -> int:
+    raw = str(value or "").strip().lower()
+    aliases = {
+        "0": 0,
+        "1": 1,
+        "2": 2,
+        "3": 3,
+        "4": 4,
+        "5-": 5,
+        "5+": 5,
+        "5弱": 5,
+        "5強": 5,
+        "6-": 6,
+        "6+": 6,
+        "6弱": 6,
+        "6強": 6,
+        "7": 7,
+    }
+    return aliases.get(raw, 0)
+
+
+def parse_jma_intensity_stations(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract observed JMA intensity stations from a detailed quake report."""
+    found: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            station_rows = node.get("IntensityStation")
+            if isinstance(station_rows, dict):
+                station_rows = [station_rows]
+            if isinstance(station_rows, list):
+                for row in station_rows:
+                    if not isinstance(row, dict):
+                        continue
+                    code = str(row.get("Code") or row.get("code") or "").strip()
+                    name = str(row.get("Name") or row.get("name") or code or "JMA").strip()
+                    intensity = row.get("Int") if row.get("Int") is not None else row.get("int")
+                    latlon = row.get("latlon") or row.get("LatLon") or {}
+                    try:
+                        lat = float(latlon.get("lat"))
+                        lon = float(latlon.get("lon"))
+                    except (TypeError, ValueError, AttributeError):
+                        continue
+                    if not (20.0 <= lat <= 46.5 and 122.0 <= lon <= 147.5):
+                        continue
+                    key_code = code or f"{lat:.4f}.{lon:.4f}"
+                    key = f"JMAI.{key_code}"
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    level = _jma_level(intensity)
+                    found.append(
+                        {
+                            "key": key,
+                            "network": "JMAI",
+                            "station": code or key_code,
+                            "name": name,
+                            "lat": round(lat, 5),
+                            "lon": round(lon, 5),
+                            "level": level,
+                            "activityLevel": level,
+                            "activityScore": None,
+                            "live": False,
+                            "online": True,
+                            "observed": True,
+                            "observedShindo": str(intensity or "0"),
+                            "source": "JMA intensidade observada",
+                        }
+                    )
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(payload)
+    return found
+
+
 def _xml_value(root: ET.Element, local_name: str) -> str | None:
     for elem in root.iter():
         if elem.tag.rsplit("}", 1)[-1] == local_name and elem.text and elem.text.strip():
@@ -192,12 +267,6 @@ def _xml_value(root: ET.Element, local_name: str) -> str | None:
 
 
 def parse_jma_eew_xml(document: str, source_url: str = "configured JMA feed") -> dict[str, Any] | None:
-    """Parse a JMA VXSE44/VXSE45-style disaster XML document.
-
-    JMA's immediate EEW telegrams are distributed through the JMA Support Center.
-    S.D.P does not invent a public endpoint: set SDP_JMA_EEW_URL to an authorized
-    JMA XML relay/feed when one is available.
-    """
     try:
         root = ET.fromstring(document)
     except ET.ParseError:
@@ -250,34 +319,33 @@ class InternationalState:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._data: dict[str, dict[str, Any]] = {
-            "mexico": {
-                "country": "mexico",
-                "label": "México",
-                "source": "CIRES / SASMEX",
-                "mode": "official-bulletin",
-                "event": None,
-                "stations": [],
-                "stationStreamAvailable": False,
-                "stationMetadataAvailable": False,
-                "stationSource": None,
-                "stationError": None,
-                "lastUpdate": None,
-                "error": None,
-            },
-            "japan": {
-                "country": "japan",
-                "label": "Japão",
-                "source": "JMA",
-                "mode": "official-eew" if JMA_EEW_URL else "official-postevent",
-                "event": None,
-                "stations": [],
-                "stationStreamAvailable": False,
-                "stationMetadataAvailable": False,
-                "stationSource": None,
-                "stationError": None,
-                "lastUpdate": None,
-                "error": None,
-            },
+            "mexico": self._country("mexico", "México", "CIRES / SASMEX", "official-bulletin"),
+            "japan": self._country(
+                "japan",
+                "Japão",
+                "JMA",
+                "official-eew" if JMA_EEW_URL else "official-postevent",
+            ),
+        }
+
+    @staticmethod
+    def _country(country: str, label: str, source: str, mode: str) -> dict[str, Any]:
+        return {
+            "country": country,
+            "label": label,
+            "source": source,
+            "mode": mode,
+            "event": None,
+            "detectedEvent": None,
+            "stations": [],
+            "stationStreamAvailable": False,
+            "stationMetadataAvailable": False,
+            "stationSource": None,
+            "stationError": None,
+            "streamSources": {},
+            "recentPicks": [],
+            "lastUpdate": None,
+            "error": None,
         }
 
     def update(self, country: str, **values: Any) -> None:
@@ -285,12 +353,189 @@ class InternationalState:
             self._data[country].update(values)
             self._data[country]["lastUpdate"] = _iso()
 
+    def _station_map(self, country: str) -> dict[str, dict[str, Any]]:
+        return {str(row.get("key")): row for row in self._data[country].get("stations", []) if row.get("key")}
+
+    def merge_stations(self, country: str, stations: list[dict[str, Any]], source_label: str | None = None) -> None:
+        with self._lock:
+            rows = self._station_map(country)
+            for incoming in stations:
+                key = str(incoming.get("key") or "")
+                if not key:
+                    continue
+                old = rows.get(key, {})
+                preserve = {
+                    name: old.get(name)
+                    for name in (
+                        "level",
+                        "activityLevel",
+                        "activityScore",
+                        "live",
+                        "online",
+                        "lastData",
+                        "lastReceived",
+                        "latencySeconds",
+                        "triggered",
+                        "lastTrigger",
+                    )
+                    if old.get("live") and not incoming.get("live")
+                }
+                merged = {**old, **incoming, **preserve}
+                merged.setdefault("level", 0)
+                merged.setdefault("activityLevel", 0)
+                merged.setdefault("live", False)
+                merged.setdefault("online", False)
+                rows[key] = merged
+            self._data[country]["stations"] = list(rows.values())
+            self._data[country]["stationMetadataAvailable"] = bool(rows)
+            if source_label:
+                self._data[country]["stationSource"] = source_label
+            self._data[country]["lastUpdate"] = _iso()
+
+    def source_status(self, country: str, key: str, **updates: Any) -> None:
+        with self._lock:
+            sources = self._data[country].setdefault("streamSources", {})
+            current = sources.setdefault(key, {"key": key})
+            current.update(updates)
+            current["updatedAt"] = _iso()
+            states = {str(item.get("state")) for item in sources.values()}
+            self._data[country]["stationStreamAvailable"] = "streaming" in states
+            self._data[country]["lastUpdate"] = _iso()
+
+    def touch_station(
+        self,
+        country: str,
+        key: str,
+        data_ts: float,
+        activity: float | None,
+        source: str,
+        received_ts: float | None = None,
+        channel: str | None = None,
+        activity_level: int | None = None,
+        activity_score: float | None = None,
+    ) -> None:
+        received_ts = received_ts or time.time()
+        latency = max(0.0, received_ts - data_ts)
+        with self._lock:
+            rows = self._station_map(country)
+            station = rows.get(key)
+            if station is None:
+                return
+            station["live"] = True
+            station["online"] = True
+            if activity is not None:
+                station["activity"] = round(max(0.0, min(1.0, float(activity))), 3)
+            if activity_level is not None:
+                level = max(0, min(7, int(activity_level)))
+                station["activityLevel"] = level
+                station["level"] = level
+            if activity_score is not None:
+                station["activityScore"] = round(max(0.0, float(activity_score)), 3)
+            station["lastData"] = _iso(data_ts)
+            station["lastReceived"] = _iso(received_ts)
+            station["lastReceivedEpoch"] = received_ts
+            station["latencySeconds"] = round(latency, 2)
+            station["source"] = source
+            if channel:
+                station["lastChannel"] = channel
+            self._data[country]["stations"] = list(rows.values())
+            self._data[country]["stationStreamAvailable"] = True
+            self._data[country]["lastUpdate"] = _iso()
+
+    def mark_trigger(self, country: str, key: str, pick_time: float, score: float, phase: str, picker: str) -> None:
+        with self._lock:
+            rows = self._station_map(country)
+            station = rows.get(key)
+            if station is None:
+                return
+            station["triggered"] = True
+            station["lastTrigger"] = _iso(pick_time)
+            station["triggerScore"] = round(float(score), 3)
+            station["lastPhase"] = phase
+            station["lastPicker"] = picker
+            self._data[country]["stations"] = list(rows.values())
+            self._data[country]["lastUpdate"] = _iso()
+
+    def add_pick(self, country: str, pick: dict[str, Any]) -> None:
+        with self._lock:
+            picks = self._data[country].setdefault("recentPicks", [])
+            picks.insert(0, copy.deepcopy(pick))
+            del picks[80:]
+            self._data[country]["lastUpdate"] = _iso()
+
+    def set_detected_event(self, country: str, event: dict[str, Any]) -> None:
+        tagged = copy.deepcopy(event)
+        tagged["country"] = country
+        tagged["official"] = False
+        tagged["source"] = "S.D.P · waveform em tempo real"
+        tagged["statusLabel"] = tagged.get("statusLabel") or "Detecção sísmica automática S.D.P"
+        with self._lock:
+            self._data[country]["detectedEvent"] = tagged
+            self._data[country]["lastUpdate"] = _iso()
+
+    def apply_observed_stations(self, country: str, stations: list[dict[str, Any]], observed_epoch: float | None = None) -> None:
+        stamp = time.time() if observed_epoch is None else observed_epoch
+        for station in stations:
+            station["observedAtEpoch"] = stamp
+            station["lastData"] = _iso(stamp)
+        self.merge_stations(country, stations, "JMA + waveform público em tempo real")
+
+    def expire_station_activity(self, country: str, live_seconds: float = 35.0, observed_seconds: float = 600.0) -> None:
+        now = time.time()
+        with self._lock:
+            rows = self._station_map(country)
+            changed = False
+            for station in rows.values():
+                if station.get("live"):
+                    last = station.get("lastReceivedEpoch")
+                    if not isinstance(last, (int, float)) or now - float(last) > live_seconds:
+                        station["live"] = False
+                        station["online"] = False
+                        station["activity"] = 0.0
+                        station["activityLevel"] = 0
+                        station["level"] = 0
+                        station["triggered"] = False
+                        changed = True
+                if station.get("observed"):
+                    observed = station.get("observedAtEpoch")
+                    if isinstance(observed, (int, float)) and now - float(observed) > observed_seconds:
+                        station["observed"] = False
+                        station["online"] = False
+                        station["activityLevel"] = 0
+                        station["level"] = 0
+                        changed = True
+            if changed:
+                self._data[country]["stations"] = list(rows.values())
+                self._data[country]["lastUpdate"] = _iso()
+
+    @staticmethod
+    def _active(event: dict[str, Any] | None, max_age: float = 600.0) -> bool:
+        if not event:
+            return False
+        try:
+            origin = float(event.get("originEpoch"))
+        except (TypeError, ValueError):
+            return False
+        return -5.0 <= time.time() - origin <= max_age
+
     def snapshot(self, country: str) -> dict[str, Any]:
         with self._lock:
-            data = dict(self._data[country])
-            data["stations"] = [dict(x) for x in self._data[country].get("stations", [])]
-            data["event"] = dict(data["event"]) if data.get("event") else None
-            return data
+            data = copy.deepcopy(self._data[country])
+        sources = data.get("streamSources") or {}
+        if isinstance(sources, dict):
+            data["streamSources"] = list(sources.values())
+        official = data.get("event")
+        detected = data.get("detectedEvent")
+        if self._active(official, 600.0) and official.get("eewEligible"):
+            display = official
+        elif self._active(detected, 600.0):
+            display = detected
+        else:
+            display = official
+        data["displayEvent"] = copy.deepcopy(display) if display else None
+        data["liveStationCount"] = sum(1 for row in data.get("stations", []) if row.get("live"))
+        data["observedStationCount"] = sum(1 for row in data.get("stations", []) if row.get("observed"))
+        return data
 
 
 @dataclass
@@ -313,14 +558,14 @@ class _Watcher(threading.Thread):
             try:
                 event = self.fetch_event()
                 self.state.update(self.country, event=event, error=None)
-            except Exception as exc:  # keep last good event visible
+            except Exception as exc:
                 self.state.update(self.country, error=str(exc)[:240])
             self.stop_event.wait(self.interval)
 
 
 class MexicoCiresWatcher(_Watcher):
     def __init__(self, state: InternationalState, stop_event: threading.Event) -> None:
-        super().__init__(state, stop_event, "mexico", 20.0)
+        super().__init__(state, stop_event, "mexico", 15.0)
 
     def fetch_event(self) -> dict[str, Any] | None:
         home = self.session.get(CIRES_HOME, timeout=12)
@@ -337,7 +582,23 @@ class MexicoCiresWatcher(_Watcher):
 
 class JapanJmaWatcher(_Watcher):
     def __init__(self, state: InternationalState, stop_event: threading.Event) -> None:
-        super().__init__(state, stop_event, "japan", 4.0 if JMA_EEW_URL else 15.0)
+        super().__init__(state, stop_event, "japan", 4.0)
+        self._last_detail = ""
+
+    def _apply_detail(self, item: dict[str, Any], event: dict[str, Any] | None) -> None:
+        detail_name = str(item.get("json") or "").strip()
+        if not detail_name or detail_name == self._last_detail:
+            return
+        detail_url = urljoin(JMA_QUAKE_DATA_BASE, detail_name)
+        response = self.session.get(detail_url, timeout=8)
+        response.raise_for_status()
+        payload = response.json()
+        if isinstance(payload, dict):
+            stations = parse_jma_intensity_stations(payload)
+            if stations:
+                observed_epoch = event.get("originEpoch") if event else None
+                self.state.apply_observed_stations("japan", stations, observed_epoch)
+        self._last_detail = detail_name
 
     def fetch_event(self) -> dict[str, Any] | None:
         if JMA_EEW_URL:
@@ -356,6 +617,10 @@ class JapanJmaWatcher(_Watcher):
             if isinstance(item, dict):
                 event = parse_jma_quake_item(item)
                 if event:
+                    try:
+                        self._apply_detail(item, event)
+                    except Exception:
+                        pass
                     return event
         return None
 
@@ -374,21 +639,27 @@ class StationInventoryWatcher(threading.Thread):
             try:
                 if self.country == "japan":
                     stations = fetch_jma_station_inventory(self.session)
-                    source = "JMA seismic-intensity stations"
+                    source = "JMA + EarthScope SeedLink"
                 else:
                     stations = fetch_mexico_station_inventory(self.session)
-                    source = "Raspberry Shake public stations in Mexico"
-                self.state.update(
-                    self.country,
-                    stations=stations,
-                    stationMetadataAvailable=bool(stations),
-                    stationStreamAvailable=False,
-                    stationSource=source,
-                    stationError=None,
-                )
+                    source = "redes sísmicas públicas + CIRES/SASMEX"
+                self.state.merge_stations(self.country, stations, source)
+                self.state.update(self.country, stationError=None)
             except Exception as exc:
                 self.state.update(self.country, stationError=str(exc)[:240])
             self.stop_event.wait(21600.0)
+
+
+class StationActivityWatchdog(threading.Thread):
+    def __init__(self, state: InternationalState, stop_event: threading.Event) -> None:
+        super().__init__(name="international-station-activity-watchdog", daemon=True)
+        self.state = state
+        self.stop_event = stop_event
+
+    def run(self) -> None:
+        while not self.stop_event.wait(5.0):
+            self.state.expire_station_activity("mexico")
+            self.state.expire_station_activity("japan")
 
 
 def start_international_watchers(state: InternationalState, stop_event: threading.Event) -> list[threading.Thread]:
@@ -397,7 +668,14 @@ def start_international_watchers(state: InternationalState, stop_event: threadin
         JapanJmaWatcher(state, stop_event),
         StationInventoryWatcher(state, stop_event, "mexico"),
         StationInventoryWatcher(state, stop_event, "japan"),
+        StationActivityWatchdog(state, stop_event),
     ]
     for watcher in watchers:
         watcher.start()
+
+    # Live waveform collectors are isolated from the official-source watchers but feed
+    # the same state. Import here avoids a circular module dependency.
+    from backend.international_live import start_international_live
+
+    watchers.extend(start_international_live(state, stop_event))
     return watchers
