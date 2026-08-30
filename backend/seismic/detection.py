@@ -25,17 +25,40 @@ class TraceBuffer:
 
 
 def normalized_station_activity(score: float, trigger_on: float) -> float:
-    """Map an STA/LTA ratio to display activity without painting normal noise as shaking.
-
-    A quiet STA/LTA trace sits near 1.0.  The old implementation divided the ratio by
-    the trigger threshold, so even ordinary background motion looked active.  Here 1.0
-    maps to zero and the public trigger maps to one.
-    """
+    """Map STA/LTA to a conservative continuous 0..1 display value."""
     if not math.isfinite(score):
         return 0.0
     span = max(0.001, trigger_on - 1.0)
     value = max(0.0, min(1.0, (score - 1.0) / span))
     return value ** 1.25
+
+
+def station_activity_level(score: float, trigger_on: float) -> int:
+    """Deterministic GlobalQuake-style station level from 0 through 7.
+
+    These are signal-to-background activity classes, not Shindo and not magnitude.
+    Level 6 begins at the actual STA/LTA trigger; level 7 is reserved for a clearly
+    stronger-than-trigger signal. Quiet cultural/microseismic background stays 0/1.
+    """
+    if not math.isfinite(score):
+        return 0
+    trigger = max(2.0, float(trigger_on))
+    thresholds = (
+        1.35,
+        1.70,
+        2.20,
+        3.00,
+        4.00,
+        trigger,
+        trigger * 1.45,
+    )
+    level = 0
+    for threshold in thresholds:
+        if score >= threshold:
+            level += 1
+        else:
+            break
+    return max(0, min(7, level))
 
 
 def has_sustained_threshold(values: np.ndarray, threshold: float, required_samples: int) -> bool:
@@ -360,7 +383,7 @@ class WaveformProcessor:
             self.state.touch_station(
                 key,
                 end_time,
-                activity=0.0,
+                activity=None,
                 source=source_key,
                 received_ts=received_time,
                 channel=channel,
@@ -416,10 +439,13 @@ class WaveformProcessor:
         pick_time = end_time - seconds_before_end
 
         activity = normalized_station_activity(score, self.settings.trigger_on)
+        level = station_activity_level(score, self.settings.trigger_on)
         self.state.touch_station(
             key,
             end_time,
             activity=activity,
+            activity_level=level,
+            activity_score=score,
             source=source_key,
             received_ts=received_time,
             channel=channel,
