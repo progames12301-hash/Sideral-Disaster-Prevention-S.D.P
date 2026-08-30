@@ -1,0 +1,51 @@
+name: One-time station sensitivity fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-station-levels-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Patch sustained-level gate
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('backend/seismic/detection.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''        activity = normalized_station_activity(score, self.settings.trigger_on)\n        level = station_activity_level(score, self.settings.trigger_on)\n        self.state.touch_station(\n            key,\n            end_time,\n            activity=activity,\n            activity_level=level,\n            activity_score=score,\n            source=source_key,\n            received_ts=received_time,\n            channel=channel,\n        )\n\n        if latency > self.settings.max_data_latency_seconds:\n            return\n\n        required_samples = max(\n            1, int(math.ceil(self.settings.trigger_persist_seconds * fs))\n        )\n        sustained = has_sustained_threshold(\n            recent, self.settings.trigger_on, required_samples\n        )\n        last_trigger = self._last_trigger.get(key, 0.0)\n'''
+          new = '''        required_samples = max(\n            1, int(math.ceil(self.settings.trigger_persist_seconds * fs))\n        )\n        sustained = has_sustained_threshold(\n            recent, self.settings.trigger_on, required_samples\n        )\n\n        activity = normalized_station_activity(score, self.settings.trigger_on)\n        raw_level = station_activity_level(score, self.settings.trigger_on)\n        # Levels 6/7 are warning states, not instantaneous amplitude colors.\n        # A short STA/LTA spike may look large numerically but must stay <=5 until\n        # it survives the same persistence gate used by the real trigger.\n        level = raw_level if sustained else min(raw_level, 5)\n        self.state.touch_station(\n            key,\n            end_time,\n            activity=activity,\n            activity_level=level,\n            activity_score=score,\n            source=source_key,\n            received_ts=received_time,\n            channel=channel,\n        )\n\n        if latency > self.settings.max_data_latency_seconds:\n            return\n\n        last_trigger = self._last_trigger.get(key, 0.0)\n'''
+          if old not in text:
+              raise SystemExit('Target detector block not found; refusing blind patch')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          app = Path('backend/app.py')
+          app_text = app.read_text(encoding='utf-8').replace('0.3.1', '0.3.3')
+          app.write_text(app_text, encoding='utf-8')
+          PY
+      - name: Compile and test
+        run: |
+          pip install -r requirements.txt pytest
+          python -m compileall -q backend
+          pytest -q
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/seismic/detection.py backend/app.py
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: require sustained motion for station levels 6-7"
+          git push
