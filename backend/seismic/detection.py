@@ -438,8 +438,19 @@ class WaveformProcessor:
         seconds_before_end = (cft.size - 1 - peak_index) / fs
         pick_time = end_time - seconds_before_end
 
+        required_samples = max(
+            1, int(math.ceil(self.settings.trigger_persist_seconds * fs))
+        )
+        sustained = has_sustained_threshold(
+            recent, self.settings.trigger_on, required_samples
+        )
+
         activity = normalized_station_activity(score, self.settings.trigger_on)
-        level = station_activity_level(score, self.settings.trigger_on)
+        raw_level = station_activity_level(score, self.settings.trigger_on)
+        # Levels 6/7 are warning states, not instantaneous amplitude colors.
+        # A short STA/LTA spike may look large numerically but must stay <=5 until
+        # it survives the same persistence gate used by the real trigger.
+        level = raw_level if sustained else min(raw_level, 5)
         self.state.touch_station(
             key,
             end_time,
@@ -454,12 +465,6 @@ class WaveformProcessor:
         if latency > self.settings.max_data_latency_seconds:
             return
 
-        required_samples = max(
-            1, int(math.ceil(self.settings.trigger_persist_seconds * fs))
-        )
-        sustained = has_sustained_threshold(
-            recent, self.settings.trigger_on, required_samples
-        )
         last_trigger = self._last_trigger.get(key, 0.0)
 
         if (
