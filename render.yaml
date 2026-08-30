@@ -25,22 +25,24 @@ services:
         value: true
       - key: SDP_PHASE_PICKER
         value: stalta
+      # Conservative operational calibration. The old 6.175 / 0.35 s pair was
+      # too easy to hit with short cultural/noise bursts in the Brazilian streams.
       - key: SDP_TRIGGER_ON
-        value: 6.175
+        value: 8.5
       - key: SDP_TRIGGER_OFF
-        value: 1.25
+        value: 1.35
       - key: SDP_STA_SECONDS
         value: 0.5
       - key: SDP_LTA_SECONDS
         value: 30.0
       - key: SDP_TRIGGER_PERSIST_SECONDS
-        value: 0.35
+        value: 0.75
       - key: SDP_FILTER_LOW_HZ
         value: 2.0
       - key: SDP_FILTER_HIGH_HZ
         value: 5.0
       - key: SDP_REFRACTORY_SECONDS
-        value: 20.0
+        value: 25.0
       - key: SDP_EEW_MAX_PICK_LATENCY
         value: 8
       - key: SDP_SEEDLINK_STALL_SECONDS
