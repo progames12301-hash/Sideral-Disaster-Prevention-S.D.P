@@ -1,0 +1,60 @@
+name: One-time international station inventory wiring
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/add-international-stations-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Wire station inventories
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('backend/international.py')
+          text = p.read_text(encoding='utf-8')
+          anchor = 'import requests\n\n\nCIRES_HOME'
+          replacement = 'import requests\n\nfrom backend.international_inventory import fetch_jma_station_inventory, fetch_mexico_station_inventory\n\n\nCIRES_HOME'
+          assert anchor in text
+          text = text.replace(anchor, replacement, 1)
+
+          text = text.replace(
+              '"stationStreamAvailable": False,\n                "lastUpdate": None,',
+              '"stationStreamAvailable": False,\n                "stationMetadataAvailable": False,\n                "stationSource": None,\n                "stationError": None,\n                "lastUpdate": None,',
+          )
+
+          marker = '\n\ndef start_international_watchers(state: InternationalState, stop_event: threading.Event) -> list[threading.Thread]:\n'
+          assert marker in text
+          watcher = '''\n\nclass StationInventoryWatcher(threading.Thread):\n    def __init__(self, state: InternationalState, stop_event: threading.Event, country: str) -> None:\n        super().__init__(name=f"international-stations-{country}", daemon=True)\n        self.state = state\n        self.stop_event = stop_event\n        self.country = country\n        self.session = requests.Session()\n        self.session.headers.update({"User-Agent": USER_AGENT, "Accept": "text/plain,text/html,*/*"})\n\n    def run(self) -> None:\n        while not self.stop_event.is_set():\n            try:\n                if self.country == "japan":\n                    stations = fetch_jma_station_inventory(self.session)\n                    source = "JMA seismic-intensity stations"\n                else:\n                    stations = fetch_mexico_station_inventory(self.session)\n                    source = "Raspberry Shake public stations in Mexico"\n                self.state.update(\n                    self.country,\n                    stations=stations,\n                    stationMetadataAvailable=bool(stations),\n                    stationStreamAvailable=False,\n                    stationSource=source,\n                    stationError=None,\n                )\n            except Exception as exc:\n                self.state.update(self.country, stationError=str(exc)[:240])\n            self.stop_event.wait(21600.0)\n'''
+          text = text.replace(marker, watcher + marker, 1)
+
+          old = '''    watchers: list[threading.Thread] = [\n        MexicoCiresWatcher(state, stop_event),\n        JapanJmaWatcher(state, stop_event),\n    ]'''
+          new = '''    watchers: list[threading.Thread] = [\n        MexicoCiresWatcher(state, stop_event),\n        JapanJmaWatcher(state, stop_event),\n        StationInventoryWatcher(state, stop_event, "mexico"),\n        StationInventoryWatcher(state, stop_event, "japan"),\n    ]'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          p.write_text(text, encoding='utf-8')
+
+          app = Path('backend/app.py')
+          app_text = app.read_text(encoding='utf-8').replace('0.4.0', '0.4.1')
+          app.write_text(app_text, encoding='utf-8')
+          PY
+      - name: Compile
+        run: python -m compileall -q backend
+      - name: Commit wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/add-international-stations-once.yml
+          git add backend/international.py backend/app.py
+          git commit -m "feat: load real Mexico and JMA station inventories"
+          git push
