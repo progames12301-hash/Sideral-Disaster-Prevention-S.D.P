@@ -1,3 +1,4 @@
+# Regression coverage for official CIRES/SASMEX and JMA source adapters.
 from backend.international import parse_cires_detail, parse_jma_eew_xml, parse_jma_quake_item
 
 
