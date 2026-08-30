@@ -77,16 +77,23 @@
   }
 
   function stationActivityLevel(st) {
-    let a = Number(st?.activity ?? 0);
-    if (!Number.isFinite(a)) a = 0;
-    if (st?.triggered) a = Math.max(a, 0.82);
-    if (a < 0.18) return 0;
-    if (a < 0.32) return 1;
-    if (a < 0.48) return 2;
-    if (a < 0.65) return 3;
-    if (a < 0.82) return 4;
-    if (a < 0.96) return 5;
-    return 6;
+    const exact = Number(st?.activityLevel);
+    if (Number.isFinite(exact)) return Math.max(0, Math.min(7, Math.round(exact)));
+
+    const score = Number(st?.activityScore);
+    if (Number.isFinite(score)) {
+      const thresholds = [1.35, 1.70, 2.20, 3.00, 4.00, 6.175, 8.954];
+      let level = 0;
+      for (const threshold of thresholds) {
+        if (score >= threshold) level += 1;
+        else break;
+      }
+      return Math.max(0, Math.min(7, level));
+    }
+
+    let activity = Number(st?.activity ?? 0);
+    if (!Number.isFinite(activity)) activity = 0;
+    return Math.max(0, Math.min(7, Math.round(activity * 7)));
   }
 
   function stationIcon(st) {
@@ -96,17 +103,19 @@
     const phase = String(st?.lastPhase || '').toUpperCase().startsWith('S') ? 'phase-s' : 'phase-p';
     return L.divIcon({
       className: '',
-      html: `<div class="station-marker ${online} activity-${level} ${triggered} ${phase}"></div>`,
-      iconSize: [11, 11],
-      iconAnchor: [5.5, 5.5]
+      html: `<div class="station-marker ${online} activity-${level} ${triggered} ${phase}"><span>${level}</span></div>`,
+      iconSize: [18, 18],
+      iconAnchor: [9, 9]
     });
   }
 
   function stationTooltip(st) {
     const channels = (st.channels || [st.channel]).filter(Boolean).join('/');
-    const activity = Math.round(Math.max(0, Math.min(1, Number(st.activity || 0))) * 100);
+    const level = stationActivityLevel(st);
+    const score = Number(st.activityScore);
+    const scoreText = Number.isFinite(score) ? ` · STA/LTA ${score.toFixed(2)}` : '';
     const phase = st.lastPhase ? ` · fase ${st.lastPhase}` : '';
-    return `${st.key} · ${channels || 'canal —'} · atividade ${activity}%${phase} · lat ${st.latencySeconds ?? '—'}s`;
+    return `${st.key} · ${channels || 'canal —'} · nível ${level}/7${scoreText}${phase} · lat ${st.latencySeconds ?? '—'}s`;
   }
 
   function findCatalogMatch(event) {
@@ -197,8 +206,6 @@
     return age >= -3 && age <= 420;
   }
 
-  // The front drawn on a map is the intersection of the 3-D seismic sphere with the surface.
-  // A hypocentral wave therefore does NOT have surface radius v*t from t=0.
   function surfaceWaveRadiusKm(elapsedSeconds, velocityKmS, depthKm) {
     const travelled = Math.max(0, elapsedSeconds) * Math.max(0.1, velocityKmS);
     const depth = Math.max(0, depthKm);
