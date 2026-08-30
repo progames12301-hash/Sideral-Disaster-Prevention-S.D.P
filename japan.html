@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR" data-country="japan">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>S.D.P Japão | JMA</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="./web/international.css">
+</head>
+<body data-country="japan">
+<div class="intl-app">
+  <aside class="intl-panel">
+    <div class="intl-brand"><div class="intl-logo">S.D.P</div><div><strong>Sideral Disaster Prevention</strong><span>Earthquake Early Warning · <b id="countryLabel">Japão</b></span></div></div>
+    <nav class="country-nav"><a href="./index.html">BRASIL</a><a href="./mexico.html">MÉXICO</a><a class="active" href="./japan.html">JAPÃO</a></nav>
+    <section class="source-card"><span class="eyebrow">FONTE OFICIAL</span><div class="source-row"><strong id="sourceName">JMA</strong><span class="badge">OFICIAL</span></div><p id="sourceMode" class="source-mode">Inicializando dados JMA…</p><small id="sourceUpdated">iniciando</small><div id="sourceError" class="source-error"></div></section>
+    <section class="event-card"><span class="eyebrow">EVENTO MAIS RECENTE</span><div id="eventStatus" class="status">Sem evento oficial ativo</div><div id="eventPlace" class="event-place">Aguardando JMA</div><div id="eventTime" class="event-time">—</div><div class="metrics"><div class="metric"><span>MAGNITUDE</span><strong id="magnitude">—</strong><small id="magnitudeMeta">—</small></div><div class="metric"><span>PROFUNDIDADE</span><strong id="depth">—</strong></div><div class="metric"><span>SHINDO JMA</span><strong id="intensity">—</strong><small>máximo publicado</small></div><div class="metric"><span>ESTAÇÕES</span><strong id="stationCount">—</strong><small>quando disponível</small></div></div></section>
+    <section class="level-card"><span class="eyebrow">NÍVEL DE ESTAÇÃO S.D.P</span><div class="level-scale"><span class="l0">0</span><span class="l1">1</span><span class="l2">2</span><span class="l3">3</span><span class="l4">4</span><span class="l5">5</span><span class="l6">6</span><span class="l7">7</span></div><p id="stationNote" class="station-note">Carregando disponibilidade de estações…</p></section>
+    <p class="station-note">A lista pública da JMA fornece informações oficiais de terremotos, mas não é o telegrama EEW em tempo real. O backend aceita um feed JMA XML autorizado via <b>SDP_JMA_EEW_URL</b>; sem ele, o S.D.P não inventa EEW nem ondas P/S.</p>
+  </aside>
+  <main class="intl-map-shell"><div id="intlMap" class="intl-map"></div><div class="map-overlay"><strong id="mapStatus">MONITOR OFICIAL</strong><span>JMA: EEW só é marcado quando chega um telegrama oficial autorizado.</span></div><div class="wave-legend"><span><i class="dot p"></i>P</span><span><i class="dot s"></i>S</span><span><i class="dot e"></i>Epicentro</span></div></main>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="./web/runtime-config.js"></script>
+<script src="./web/international.js"></script>
+</body></html>
