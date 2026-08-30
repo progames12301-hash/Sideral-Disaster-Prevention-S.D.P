@@ -19,33 +19,61 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Patch sustained-level gate
+      - name: Patch significant-signal station levels
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          path = Path('backend/seismic/detection.py')
-          text = path.read_text(encoding='utf-8')
-          old = '''        activity = normalized_station_activity(score, self.settings.trigger_on)\n        level = station_activity_level(score, self.settings.trigger_on)\n        self.state.touch_station(\n            key,\n            end_time,\n            activity=activity,\n            activity_level=level,\n            activity_score=score,\n            source=source_key,\n            received_ts=received_time,\n            channel=channel,\n        )\n\n        if latency > self.settings.max_data_latency_seconds:\n            return\n\n        required_samples = max(\n            1, int(math.ceil(self.settings.trigger_persist_seconds * fs))\n        )\n        sustained = has_sustained_threshold(\n            recent, self.settings.trigger_on, required_samples\n        )\n        last_trigger = self._last_trigger.get(key, 0.0)\n'''
-          new = '''        required_samples = max(\n            1, int(math.ceil(self.settings.trigger_persist_seconds * fs))\n        )\n        sustained = has_sustained_threshold(\n            recent, self.settings.trigger_on, required_samples\n        )\n\n        activity = normalized_station_activity(score, self.settings.trigger_on)\n        raw_level = station_activity_level(score, self.settings.trigger_on)\n        # Levels 6/7 are warning states, not instantaneous amplitude colors.\n        # A short STA/LTA spike may look large numerically but must stay <=5 until\n        # it survives the same persistence gate used by the real trigger.\n        level = raw_level if sustained else min(raw_level, 5)\n        self.state.touch_station(\n            key,\n            end_time,\n            activity=activity,\n            activity_level=level,\n            activity_score=score,\n            source=source_key,\n            received_ts=received_time,\n            channel=channel,\n        )\n\n        if latency > self.settings.max_data_latency_seconds:\n            return\n\n        last_trigger = self._last_trigger.get(key, 0.0)\n'''
-          if old not in text:
-              raise SystemExit('Target detector block not found; refusing blind patch')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          detector = Path('backend/seismic/detection.py')
+          text = detector.read_text(encoding='utf-8')
 
-          app = Path('backend/app.py')
-          app_text = app.read_text(encoding='utf-8').replace('0.3.1', '0.3.3')
+          old_thresholds = '''    thresholds = (\n        1.35,\n        1.70,\n        2.20,\n        3.00,\n        4.00,\n        trigger,\n        trigger * 1.45,\n    )'''
+          new_thresholds = '''    thresholds = (\n        2.60,\n        3.30,\n        4.10,\n        5.00,\n        6.20,\n        trigger,\n        trigger * 1.35,\n    )'''
+          if old_thresholds not in text:
+              raise SystemExit('station_activity_level thresholds not found')
+          text = text.replace(old_thresholds, new_thresholds, 1)
+
+          marker = '''def has_sustained_threshold(values: np.ndarray, threshold: float, required_samples: int) -> bool:\n    \"\"\"Reject isolated one-sample spikes; require a short continuous onset.\"\"\"\n    required_samples = max(1, int(required_samples))\n    run = 0\n    for value in values:\n        if float(value) >= threshold:\n            run += 1\n            if run >= required_samples:\n                return True\n        else:\n            run = 0\n    return False\n'''
+          addition = marker + '''\n\ndef sustained_station_activity_level(\n    values: np.ndarray,\n    trigger_on: float,\n    sample_rate: float,\n    trigger_persist_seconds: float,\n    display_persist_seconds: float = 0.45,\n) -> int:\n    \"\"\"Return 0 for background motion and 1..7 only for sustained significant motion.\n\n    Every displayed level has a persistence requirement. Levels 6 and 7 use the\n    full detector persistence window, so a short cultural/noise spike cannot paint\n    a station as an extreme signal.\n    \"\"\"\n    if values.size == 0 or sample_rate <= 0:\n        return 0\n    trigger = max(2.0, float(trigger_on))\n    thresholds = (2.60, 3.30, 4.10, 5.00, 6.20, trigger, trigger * 1.35)\n    level = 0\n    for index, threshold in enumerate(thresholds, start=1):\n        persist = trigger_persist_seconds if index >= 6 else display_persist_seconds\n        required = max(1, int(math.ceil(max(0.05, persist) * sample_rate)))\n        if has_sustained_threshold(values, threshold, required):\n            level = index\n        else:\n            break\n    return level\n'''
+          if 'def sustained_station_activity_level(' not in text:
+              if marker not in text:
+                  raise SystemExit('has_sustained_threshold block not found')
+              text = text.replace(marker, addition, 1)
+
+          old_block = '''        activity = normalized_station_activity(score, self.settings.trigger_on)\n        raw_level = station_activity_level(score, self.settings.trigger_on)\n        # Levels 6/7 are warning states, not instantaneous amplitude colors.\n        # A short STA/LTA spike may look large numerically but must stay <=5 until\n        # it survives the same persistence gate used by the real trigger.\n        level = raw_level if sustained else min(raw_level, 5)\n'''
+          new_block = '''        # Display levels are intentionally stricter than raw STA/LTA peaks. Background\n        # and ordinary oscillation stay at 0. A level appears only after the signal\n        # remains above that level's threshold for a minimum duration.\n        level = sustained_station_activity_level(\n            recent,\n            self.settings.trigger_on,\n            fs,\n            self.settings.trigger_persist_seconds,\n        )\n        activity = level / 7.0\n'''
+          if old_block not in text:
+              raise SystemExit('current station level block not found')
+          text = text.replace(old_block, new_block, 1)
+          detector.write_text(text, encoding='utf-8')
+
+          tests = Path('tests/test_station_detector.py')
+          tests.write_text('''import numpy as np\n\nfrom backend.seismic.detection import (\n    has_sustained_threshold,\n    normalized_station_activity,\n    station_activity_level,\n    sustained_station_activity_level,\n)\n\n\ndef test_quiet_ratio_stays_zero():\n    assert normalized_station_activity(1.0, 8.5) == 0.0\n    assert station_activity_level(2.4, 8.5) == 0\n    values = np.full(40, 2.2)\n    assert sustained_station_activity_level(values, 8.5, 20.0, 0.75) == 0\n\n\ndef test_scalar_levels_start_only_after_significant_signal():\n    samples = [1.0, 2.7, 3.4, 4.2, 5.1, 6.3, 8.6, 11.6]\n    assert [station_activity_level(value, 8.5) for value in samples] == list(range(8))\n\n\ndef test_single_large_spike_stays_zero_on_display():\n    values = np.ones(40)\n    values[20] = 20.0\n    assert sustained_station_activity_level(values, 8.5, 20.0, 0.75) == 0\n\n\ndef test_sustained_moderate_signal_becomes_level_two():\n    values = np.concatenate([np.ones(20), np.full(12, 3.5), np.ones(8)])\n    assert sustained_station_activity_level(values, 8.5, 20.0, 0.75) == 2\n\n\ndef test_level_six_requires_full_trigger_persistence():\n    short = np.concatenate([np.ones(20), np.full(10, 9.0), np.ones(10)])\n    long = np.concatenate([np.ones(20), np.full(16, 9.0), np.ones(4)])\n    assert sustained_station_activity_level(short, 8.5, 20.0, 0.75) == 5\n    assert sustained_station_activity_level(long, 8.5, 20.0, 0.75) == 6\n\n\ndef test_single_spike_does_not_trigger():\n    values = np.array([1.0, 1.1, 12.0, 1.2, 1.0])\n    assert not has_sustained_threshold(values, 8.5, required_samples=2)\n\n\ndef test_sustained_onset_triggers():\n    values = np.array([1.0, 8.7, 9.0, 9.2, 1.1])\n    assert has_sustained_threshold(values, 8.5, required_samples=3)\n''', encoding='utf-8')
+
+          app = Path('web/app.js')
+          app_text = app.read_text(encoding='utf-8')
+          app_text = app_text.replace(
+              'const thresholds = [1.35, 1.70, 2.20, 3.00, 4.00, 6.175, 8.954];',
+              'const thresholds = [2.60, 3.30, 4.10, 5.00, 6.20, 8.50, 11.475];',
+              1,
+          )
           app.write_text(app_text, encoding='utf-8')
+
+          sw = Path('web/sw.js')
+          sw_text = sw.read_text(encoding='utf-8').replace("sdp-shell-v1", "sdp-shell-v4")
+          sw.write_text(sw_text, encoding='utf-8')
           PY
       - name: Compile and test
         run: |
           pip install -r requirements.txt pytest
           python -m compileall -q backend
           pytest -q
+          node --check web/app.js
       - name: Commit fix
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/seismic/detection.py backend/app.py
+          git add backend/seismic/detection.py tests/test_station_detector.py web/app.js web/sw.js
           git diff --cached --quiet && exit 0
-          git commit -m "fix: require sustained motion for station levels 6-7"
+          git commit -m "fix: keep stations at zero until sustained significant motion"
           git push
