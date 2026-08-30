@@ -71,6 +71,8 @@ class SystemState:
             merged = {**existing, **station}
             merged.setdefault("online", False)
             merged.setdefault("activity", 0.0)
+            merged.setdefault("activityLevel", 0)
+            merged.setdefault("activityScore", 1.0)
             merged.setdefault("triggered", False)
             merged.setdefault("lastData", None)
             merged.setdefault("latencySeconds", None)
@@ -98,11 +100,19 @@ class SystemState:
         self,
         key: str,
         data_ts: float,
-        activity: float,
+        activity: float | None,
         source: str,
         received_ts: float | None = None,
         channel: str | None = None,
+        activity_level: int | None = None,
+        activity_score: float | None = None,
     ) -> None:
+        """Update telemetry without letting non-Z packets erase the last shaking level.
+
+        `activity=None` means that this packet is only a network/latency heartbeat.  That is
+        important with 3-component streams: an N/E packet arriving just after Z must not reset
+        a station back to level 0.
+        """
         received_ts = received_ts or time.time()
         latency = max(0.0, received_ts - data_ts)
         with self._lock:
@@ -112,7 +122,12 @@ class SystemState:
             self._latencies.setdefault(key, deque(maxlen=self._latency_history_size)).append(latency)
             self._last_received_epoch[key] = received_ts
             station["online"] = True
-            station["activity"] = round(max(0.0, min(activity, 1.0)), 3)
+            if activity is not None:
+                station["activity"] = round(max(0.0, min(float(activity), 1.0)), 3)
+            if activity_level is not None:
+                station["activityLevel"] = max(0, min(7, int(activity_level)))
+            if activity_score is not None:
+                station["activityScore"] = round(max(0.0, float(activity_score)), 3)
             station["lastData"] = utc_iso(data_ts)
             station["lastReceived"] = utc_iso(received_ts)
             station["latencySeconds"] = round(latency, 2)
@@ -123,7 +138,9 @@ class SystemState:
             payload = {
                 "key": key,
                 "online": True,
-                "activity": station["activity"],
+                "activity": station.get("activity", 0.0),
+                "activityLevel": station.get("activityLevel", 0),
+                "activityScore": station.get("activityScore", 1.0),
                 "lastData": station["lastData"],
                 "lastReceived": station["lastReceived"],
                 "latencySeconds": station["latencySeconds"],
