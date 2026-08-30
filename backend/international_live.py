@@ -166,6 +166,9 @@ class InternationalProcessorState:
     def __init__(self, international_state: Any, country: str) -> None:
         self.state = international_state
         self.country = country
+        # WaveformProcessor checks this dictionary when deciding when a station trigger
+        # has returned to background. Keep the detector-local flag synchronized here.
+        self.stations: dict[str, dict[str, Any]] = {}
 
     def source_status(self, key: str, **updates: Any) -> None:
         self.state.source_status(self.country, key, **updates)
@@ -181,6 +184,9 @@ class InternationalProcessorState:
         activity_level: int | None = None,
         activity_score: float | None = None,
     ) -> None:
+        local = self.stations.setdefault(key, {"triggered": False})
+        if activity_level is not None:
+            local["activityLevel"] = max(0, min(7, int(activity_level)))
         self.state.touch_station(
             self.country,
             key,
@@ -194,7 +200,11 @@ class InternationalProcessorState:
         )
 
     def mark_trigger(self, key: str, pick_time: float, score: float, phase: str = "P", picker: str = "stalta") -> None:
+        self.stations.setdefault(key, {})["triggered"] = True
         self.state.mark_trigger(self.country, key, pick_time, score, phase, picker)
+
+    def clear_trigger(self, key: str) -> None:
+        self.stations.setdefault(key, {})["triggered"] = False
 
     def add_pick(self, pick: dict[str, Any]) -> None:
         self.state.add_pick(self.country, pick)
@@ -231,6 +241,7 @@ class LiveBootstrap(threading.Thread):
                 registry: dict[str, Station] = {}
                 for station in streams:
                     registry[station.key] = station
+                    adapter.stations[station.key] = {"triggered": False}
                     public_rows.append(
                         {
                             **station.public(),
@@ -253,8 +264,8 @@ class LiveBootstrap(threading.Thread):
                     stationCount=len(streams),
                 )
 
-                # International live streams deliberately use the exact same conservative
-                # 0..7 STA/LTA/persistence calibration as the operational Brazil detector.
+                # International live streams use the exact same conservative 0..7
+                # STA/LTA and persistence calibration as the operational Brazil detector.
                 detector_settings = replace(settings, phase_picker="stalta")
                 processor = WaveformProcessor(detector_settings, adapter, registry)
 
