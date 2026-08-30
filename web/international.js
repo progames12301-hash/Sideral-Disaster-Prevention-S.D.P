@@ -29,9 +29,9 @@
   const eventLayer = L.layerGroup().addTo(map);
   const stationLayer = L.layerGroup().addTo(map);
   let currentEvent = null;
+  let currentStations = [];
   let pCircle = null;
   let sCircle = null;
-  let eventMarker = null;
 
   function fmtTime(epoch, fallback) {
     if (Number.isFinite(Number(epoch))) {
@@ -56,24 +56,31 @@
   }
 
   function renderStations(stations) {
+    currentStations = Array.isArray(stations) ? stations : [];
     stationLayer.clearLayers();
-    for (const st of stations || []) {
+    for (const st of currentStations) {
       const lat = Number(st.lat), lon = Number(st.lon);
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
       const level = Math.max(0, Math.min(7, Math.round(Number(st.level ?? st.activityLevel ?? 0))));
+      const live = st.live === true;
       const icon = L.divIcon({
         className: '',
-        html: `<div class="station-marker" style="background:${stationColor(level)}"><span>${level}</span></div>`,
+        html: `<div class="station-marker${live ? ' live' : ' metadata'}" style="background:${stationColor(level)}"><span>${level}</span></div>`,
         iconSize: [18,18], iconAnchor: [9,9]
       });
-      L.marker([lat, lon], { icon }).bindTooltip(`${st.name || st.key || 'Estação'} · nível ${level}`).addTo(stationLayer);
+      const source = st.source ? ` · ${st.source}` : '';
+      const mode = live ? `nível ${level}` : 'nível 0 · posição real, sem stream de movimento';
+      L.marker([lat, lon], { icon })
+        .bindTooltip(`${st.name || st.key || 'Estação'} · ${mode}${source}`)
+        .addTo(stationLayer);
     }
   }
 
   function renderEvent(event) {
     currentEvent = event || null;
     eventLayer.clearLayers();
-    pCircle = null; sCircle = null; eventMarker = null;
+    pCircle = null;
+    sCircle = null;
 
     if (!event) {
       els.eventStatus.textContent = 'Sem evento oficial ativo';
@@ -83,7 +90,7 @@
       els.magnitudeMeta.textContent = '—';
       els.depth.textContent = '—';
       els.intensity.textContent = '—';
-      els.stationCount.textContent = '—';
+      els.stationCount.textContent = String(currentStations.length || '—');
       return;
     }
 
@@ -94,12 +101,12 @@
     els.magnitudeMeta.textContent = event.magnitudeType || '—';
     els.depth.textContent = event.depthKm != null ? `${Number(event.depthKm).toFixed(0)} km` : '—';
     els.intensity.textContent = event.maxIntensity || '—';
-    els.stationCount.textContent = event.stationCount ?? '—';
+    els.stationCount.textContent = event.stationCount ?? currentStations.length ?? '—';
 
     const lat = Number(event.lat), lon = Number(event.lon);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
     const icon = L.divIcon({ className: '', html: '<div class="epicenter-cross"></div>', iconSize: [26,26], iconAnchor: [13,13] });
-    eventMarker = L.marker([lat,lon], { icon, zIndexOffset: 1000 }).bindTooltip(event.statusLabel || 'Epicentro').addTo(eventLayer);
+    L.marker([lat,lon], { icon, zIndexOffset: 1000 }).bindTooltip(event.statusLabel || 'Epicentro').addTo(eventLayer);
 
     const age = Date.now()/1000 - Number(event.originEpoch);
     if (event.waveEligible === true && Number.isFinite(age) && age >= -3 && age <= 420) {
@@ -126,19 +133,31 @@
       const res = await fetch(`/api/international/${country}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      els.sourceMode.textContent = data.mode === 'official-eew'
-        ? 'Feed JMA EEW autorizado + catálogo oficial'
-        : data.mode === 'official-postevent'
-          ? 'JMA oficial · informação pós-evento; EEW XML aguarda feed autorizado'
-          : 'Boletins oficiais CIRES/SASMEX';
+      const stations = Array.isArray(data.stations) ? data.stations : [];
+
+      if (country === 'japan') {
+        els.sourceMode.textContent = data.mode === 'official-eew'
+          ? 'JMA EEW oficial + inventário de estações JMA'
+          : 'JMA oficial · terremotos + inventário real de estações; EEW instantâneo aguarda feed autorizado';
+      } else {
+        els.sourceMode.textContent = 'CIRES/SASMEX oficial + inventário público de estações sísmicas no México';
+      }
+
       els.sourceUpdated.textContent = data.lastUpdate ? `atualizado ${new Date(data.lastUpdate).toLocaleTimeString('pt-BR')}` : 'iniciando';
-      els.sourceError.textContent = data.error || '';
-      els.sourceError.classList.toggle('show', Boolean(data.error));
-      els.stationNote.textContent = data.stationStreamAvailable
-        ? 'Estações oficiais disponíveis: nível 0 em repouso e 1–7 apenas com sinal significativo sustentado.'
-        : 'A fonte pública atual não entrega waveform/nível bruto por estação. O S.D.P não inventa estações 1–7: elas ficam ausentes até existir um feed oficial compatível.';
+      const errors = [data.error, data.stationError].filter(Boolean);
+      els.sourceError.textContent = errors.join(' · ');
+      els.sourceError.classList.toggle('show', errors.length > 0);
+
+      if (data.stationStreamAvailable) {
+        els.stationNote.textContent = `${stations.length} estações com sinal em tempo real. 0 = repouso; 1–7 apenas quando o movimento cresce de forma significativa.`;
+      } else if (data.stationMetadataAvailable || stations.length) {
+        els.stationNote.textContent = `${stations.length} estações reais carregadas (${data.stationSource || 'inventário público'}). Por enquanto ficam em 0 porque ainda não existe stream de movimento compatível ligado ao S.D.P; nenhum nível é inventado.`;
+      } else {
+        els.stationNote.textContent = 'Carregando o inventário real de estações. Nenhuma estação artificial será criada.';
+      }
+
       els.mapStatus.textContent = data.event?.eewEligible ? 'ALERTA/EEW OFICIAL RECEBIDO' : 'MONITOR OFICIAL · sem EEW ativo';
-      renderStations(data.stations || []);
+      renderStations(stations);
       renderEvent(data.event || null);
     } catch (err) {
       els.sourceError.textContent = `Backend/fonte indisponível: ${err.message}`;
