@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-06T08:06:19.849234Z",
+  "generatedAt": "2026-09-07T08:36:50.747614Z",
   "sources": [
     {
       "endpoint": "seisrequest.iag.usp.br:18000",
@@ -10,7 +10,7 @@
       "addresses": [
         "143.107.18.55"
       ],
-      "connectMs": 844.7,
+      "connectMs": 578.0,
       "hello": "SeedLink v3.3 (2024.020)\r\nCentro de Sismologia da USP",
       "key": "usp",
       "label": "USP / IAG",
@@ -29,7 +29,7 @@
       "addresses": [
         "200.20.187.208"
       ],
-      "connectMs": 419.2,
+      "connectMs": 566.5,
       "hello": "SeedLink v3.2 (2014.071)\r\nObservatorio Nacional",
       "key": "on",
       "label": "Observatório Nacional",
