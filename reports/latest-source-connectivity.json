@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-01T10:25:52.687775Z",
+  "generatedAt": "2026-10-02T10:01:35.427775Z",
   "sources": [
     {
       "endpoint": "seisrequest.iag.usp.br:18000",
@@ -10,7 +10,7 @@
       "addresses": [
         "143.107.18.55"
       ],
-      "connectMs": 896.2,
+      "connectMs": 611.9,
       "hello": "SeedLink v3.3 (2024.020)\r\nCentro de Sismologia da USP",
       "key": "usp",
       "label": "USP / IAG",
@@ -24,13 +24,9 @@
       "endpoint": "rsis1.on.br:18000",
       "host": "rsis1.on.br",
       "port": 18000,
-      "tcp": true,
-      "seedlinkHello": true,
-      "addresses": [
-        "200.20.187.208"
-      ],
-      "connectMs": 648.5,
-      "hello": "SeedLink v3.2 (2014.071)\r\nObservatorio Nacional",
+      "tcp": false,
+      "seedlinkHello": false,
+      "error": "DNS: [Errno -3] Temporary failure in name resolution",
       "key": "on",
       "label": "Observatório Nacional",
       "configuredEnabled": true,
