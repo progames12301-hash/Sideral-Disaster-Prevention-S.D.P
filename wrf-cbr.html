@@ -855,7 +855,7 @@
                 label: 'Refletividade',
                 unit: 'dBZ',
                 field: 'reflectivity',
-                sourceHint: 'WRF 7 km · REFL_10CM nativo',
+                sourceHint: 'WRF CBR 4 km · REFL_10CM nativo',
                 legendMin: 5,
                 legendMax: 75,
                 palette: REFLECTIVITY_PALETTE
@@ -933,8 +933,13 @@
 
         // WRF CBR 4 km: variáveis nativas disponíveis nos quadros JSON publicados.
         Object.assign(VARIABLE_CONFIGS, {
-            u10Ms: { label: 'Componente zonal do vento (U10)', unit: 'm/s', field: 'u10', sourceHint: 'WRF CBR 4 km', legendMin: -25, legendMax: 25, palette: ['#2166ac','#67a9cf','#f7f7f7','#fdae61','#b2182b'] },
-            v10Ms: { label: 'Componente meridional do vento (V10)', unit: 'm/s', field: 'v10', sourceHint: 'WRF CBR 4 km', legendMin: -25, legendMax: 25, palette: ['#2166ac','#67a9cf','#f7f7f7','#fdae61','#b2182b'] },
+            u10Ms: { label: 'Componente zonal do vento (U10)', unit: 'm/s', field: 'u10Ms', sourceHint: 'WRF CBR 4 km', legendMin: -25, legendMax: 25, palette: ['#2166ac','#67a9cf','#f7f7f7','#fdae61','#b2182b'] },
+            v10Ms: { label: 'Componente meridional do vento (V10)', unit: 'm/s', field: 'v10Ms', sourceHint: 'WRF CBR 4 km', legendMin: -25, legendMax: 25, palette: ['#2166ac','#67a9cf','#f7f7f7','#fdae61','#b2182b'] },
+            wind10Ms: { label: 'Velocidade do vento a 10 m', unit: 'm/s', field: 'wind10Ms', sourceHint: 'WRF CBR 4 km', legendMin: 0, legendMax: 35, palette: ['#f8fafc','#93c5fd','#38bdf8','#22c55e','#facc15','#ef4444'] },
+            wind10DirDeg: { label: 'Direção do vento a 10 m', unit: '°', field: 'wind10DirDeg', sourceHint: 'WRF CBR 4 km', legendMin: 0, legendMax: 360, palette: ['#1d4ed8','#06b6d4','#22c55e','#facc15','#f97316','#dc2626','#7c3aed'] },
+            t2C: { label: 'Temperatura a 2 m', unit: '°C', field: 't2C', sourceHint: 'WRF CBR 4 km', legendMin: -10, legendMax: 45, palette: ['#1d4ed8','#38bdf8','#86efac','#facc15','#fb923c','#ef4444'] },
+            rh2Pct: { label: 'Umidade relativa a 2 m', unit: '%', field: 'rh2Pct', sourceHint: 'WRF CBR 4 km', legendMin: 0, legendMax: 100, palette: ['#f8fafc','#dbeafe','#93c5fd','#38bdf8','#22c55e','#facc15','#fb923c','#ef4444'] },
+            rainTotalMm: { label: 'Precipitação total acumulada', unit: 'mm', field: 'rainTotalMm', sourceHint: 'WRF CBR 4 km', legendMin: 0, legendMax: 150, palette: ['#ffffff','#dbeafe','#7dd3fc','#38bdf8','#0284c7','#0f766e','#22c55e','#facc15','#fb923c','#ef4444','#7f1d1d'] },
             reflectivityCompositeDbz: { label: 'Refletividade composta', unit: 'dBZ', field: 'reflectivityCompositeDbz', sourceHint: 'WRF CBR 4 km', legendMin: 5, legendMax: 75, palette: REFLECTIVITY_PALETTE },
             td2C: { label: 'Ponto de orvalho a 2 m', unit: '°C', field: 'td2C', sourceHint: 'WRF CBR 4 km', legendMin: -10, legendMax: 35, palette: ['#1d4ed8','#38bdf8','#86efac','#facc15','#fb923c','#ef4444'] },
             psfcHpa: { label: 'Pressão à superfície', unit: 'hPa', field: 'psfcHpa', sourceHint: 'WRF CBR 4 km', legendMin: 800, legendMax: 1030, palette: ['#2563eb','#38bdf8','#22c55e','#facc15','#ef4444'] },
@@ -949,7 +954,7 @@
             cloudFraction: { label: 'Fração de nuvens', unit: '%', field: 'cloudFraction', sourceHint: 'WRF CBR 4 km', legendMin: 0, legendMax: 100, palette: ['#f8fafc','#bae6fd','#38bdf8','#2563eb','#4f46e5'] }
         });
 
-        // WRF 2 is a parallel diagnostic product. These fields never replace        // reflectivity and are rendered only when the separate severe payload
+        // WRF 2 is a parallel diagnostic product. These fields never replace reflectivity and are rendered only when the separate severe payload
         // supplies a finite value.
         Object.assign(VARIABLE_CONFIGS, {
             reflectivity_cim: { label: 'Refletividade CIM WRF 8 km', unit: 'dBZ', field: 'reflectivity', sourceHint: 'CIM WRF 8 km · REFL_10CM nativo · grade nativa', legendMin: 5, legendMax: 75, palette: REFLECTIVITY_PALETTE },
@@ -4654,6 +4659,8 @@
     // CBR frames contain and that the original renderer knows how to draw.
     const candidates = Object.entries(VARIABLE_CONFIGS).filter(([key, spec]) => {
       if (key.endsWith('_cim') || key === 'qpf3h' || key === 'qpf6h') return false;
+      // Nesta página, use os nomes nativos do JSON em vez de duplicá-los com aliases genéricos.
+      if (['precipitation', 'wind', 'windDirection', 'temperature', 'humidity'].includes(key)) return false;
       return variableAvailable(key, spec, available);
     });
     const supported = candidates.map(([key]) => key);
