@@ -933,6 +933,8 @@
 
         // WRF CBR 4 km: variáveis nativas disponíveis nos quadros JSON publicados.
         Object.assign(VARIABLE_CONFIGS, {
+            u10Ms: { label: 'Componente zonal do vento (U10)', unit: 'm/s', field: 'u10', sourceHint: 'WRF CBR 4 km', legendMin: -25, legendMax: 25, palette: ['#2166ac','#67a9cf','#f7f7f7','#fdae61','#b2182b'] },
+            v10Ms: { label: 'Componente meridional do vento (V10)', unit: 'm/s', field: 'v10', sourceHint: 'WRF CBR 4 km', legendMin: -25, legendMax: 25, palette: ['#2166ac','#67a9cf','#f7f7f7','#fdae61','#b2182b'] },
             reflectivityCompositeDbz: { label: 'Refletividade composta', unit: 'dBZ', field: 'reflectivityCompositeDbz', sourceHint: 'WRF CBR 4 km', legendMin: 5, legendMax: 75, palette: REFLECTIVITY_PALETTE },
             td2C: { label: 'Ponto de orvalho a 2 m', unit: '°C', field: 'td2C', sourceHint: 'WRF CBR 4 km', legendMin: -10, legendMax: 35, palette: ['#1d4ed8','#38bdf8','#86efac','#facc15','#fb923c','#ef4444'] },
             psfcHpa: { label: 'Pressão à superfície', unit: 'hPa', field: 'psfcHpa', sourceHint: 'WRF CBR 4 km', legendMin: 800, legendMax: 1030, palette: ['#2563eb','#38bdf8','#22c55e','#facc15','#ef4444'] },
