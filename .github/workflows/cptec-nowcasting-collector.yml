@@ -1,0 +1,57 @@
+name: CPTEC Nowcasting — coleta de todos os radares e produtos
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Inventaria o catálogo completo uma vez por hora.
+    - cron: "17 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cptec-nowcasting-collector
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    name: Descobrir catálogo e baixar imagens disponíveis
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Baixar o repositório
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependência HTTP
+        run: python -m pip install --disable-pip-version-check requests
+
+      - name: Descobrir provedores, radares, produtos e horários; baixar todos os frames listados
+        id: collect
+        continue-on-error: true
+        env:
+          CPTEC_OUTPUT_DIR: cptec-nowcasting-output
+          CPTEC_DOWNLOAD_WORKERS: "8"
+          CPTEC_REQUEST_TIMEOUT: "25"
+        run: python scripts/cptec_nowcasting_collector.py
+
+      - name: Salvar inventário, imagens e diagnóstico como artefato
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cptec-nowcasting-${{ github.run_number }}
+          path: cptec-nowcasting-output/
+          if-no-files-found: warn
+          retention-days: 30
+          # PNG/JPEG já são comprimidos; evita gastar tempo comprimindo novamente.
+          compression-level: 0
+
+      - name: Sinalizar falha da coleta no status do workflow
+        if: steps.collect.outcome != 'success'
+        run: |
+          echo "A coleta não terminou com sucesso. O artefato foi enviado para diagnóstico, se foi possível gerar arquivos."
+          exit 1
