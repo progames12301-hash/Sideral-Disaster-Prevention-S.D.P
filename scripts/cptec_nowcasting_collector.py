@@ -222,7 +222,7 @@ def main():
     shard_index=int(os.getenv('CPTEC_SHARD_INDEX','0'))
     if shard_index < 0 or shard_index >= shard_count:
         raise ValueError(f'CPTEC_SHARD_INDEX={shard_index} inválido para CPTEC_SHARD_COUNT={shard_count}')
-    refs=set(ordered_refs[shard_index::shard_count])
+    refs={ref for ref in ordered_refs if int(hashlib.sha256(ref.encode('utf-8')).hexdigest()[:8],16) % shard_count == shard_index}
     discovery['candidate_frames']=catalog_count
     discovery['shard']={'index':shard_index,'count':shard_count,'assigned_frames':len(refs)}
     discovery['generated_at']=utcnow()
