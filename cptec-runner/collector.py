@@ -20,7 +20,7 @@ CATALOG_ROOT = urljoin(SITE, CATALOG_PATH)
 
 FRAME_RX = re.compile(r'(?:https?://[^\s\"\'<>]+)?/?(?:api/v1/paths/)?(frames/radar/[^\s\"\'<>?#]+)', re.I)
 COMPOSITE_RX = re.compile(r'([A-Za-z0-9_.-]+~[A-Za-z0-9_.-]+~[A-Za-z0-9_.-]+~[A-Za-z0-9_.-]+)/(\d{12})/(?:full|original|large|medium|small|thumbnail)?', re.I)
-API_RX = re.compile(r'[\"\'](\/api\/v1\/[A-Za-z0-9_./?=&%{}:$-]+)[\"\']')
+API_RX = re.compile(r'[\"\'](\/api\/v1\/[A-Za-z0-9_./?=&%{}:$~-]+)[\"\']')
 SCRIPT_RX = re.compile(r'(?:src|href)=[\"\']([^\"\']+\.(?:m?js)(?:\?[^\"\']*)?)[\"\']', re.I)
 JSON_RX = re.compile(r'(?:src|href)=[\"\']([^\"\']+\.(?:json|geojson)(?:\?[^\"\']*)?)[\"\']', re.I)
 
@@ -476,7 +476,7 @@ def main():
     if not all_refs:
         (OUT/'index.json').write_text(json.dumps({'schema':'sideral.cptec-index.v1','source':'CPTEC/INPE Nowcasting','generated_at':utcnow(),'frames':[],'error':'Nenhum frame encontrado; consulte discovery.json.','summary':{'catalog_frames_discovered':0,'shard_index':shard_index,'shard_count':shard_count}},ensure_ascii=False,indent=2),encoding='utf-8')
         (OUT/'errors.json').write_text(json.dumps({'generated_at':utcnow(),'count':0,'errors':[]},ensure_ascii=False,indent=2),encoding='utf-8')
-        print('ERRO: nenhum frame encontrado nos endpoints/catalogos descobertos.',file=sys.stderr); return 2
+        print('ERRO: nenhum quadro encontrado na árvore oficial de paths; consulte discovery.json para as respostas observadas.',file=sys.stderr); return 2
     print(f'Catálogo: {catalog_count} frames; partição {shard_index+1}/{shard_count}: {len(refs)} frames; {WORKERS} workers.')
     results=[]
     with concurrent.futures.ThreadPoolExecutor(max_workers=WORKERS) as pool:
