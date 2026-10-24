@@ -215,12 +215,23 @@ def download(ref):
 
 def main():
     OUT.mkdir(parents=True,exist_ok=True)
-    refs,discovery=catalog(); discovery['candidate_frames']=len(refs); discovery['generated_at']=utcnow()
+    all_refs,discovery=catalog()
+    ordered_refs=sorted(all_refs)
+    catalog_count=len(ordered_refs)
+    shard_count=max(1,min(int(os.getenv('CPTEC_SHARD_COUNT','1')),16))
+    shard_index=int(os.getenv('CPTEC_SHARD_INDEX','0'))
+    if shard_index < 0 or shard_index >= shard_count:
+        raise ValueError(f'CPTEC_SHARD_INDEX={shard_index} inválido para CPTEC_SHARD_COUNT={shard_count}')
+    refs=set(ordered_refs[shard_index::shard_count])
+    discovery['candidate_frames']=catalog_count
+    discovery['shard']={'index':shard_index,'count':shard_count,'assigned_frames':len(refs)}
+    discovery['generated_at']=utcnow()
     (OUT/'discovery.json').write_text(json.dumps(discovery,ensure_ascii=False,indent=2),encoding='utf-8')
-    if not refs:
-        (OUT/'index.json').write_text(json.dumps({'schema':'sideral.cptec-index.v1','source':'CPTEC/INPE Nowcasting','generated_at':utcnow(),'frames':[],'error':'Nenhum frame encontrado; consulte discovery.json.'},ensure_ascii=False,indent=2),encoding='utf-8')
+    if not all_refs:
+        (OUT/'index.json').write_text(json.dumps({'schema':'sideral.cptec-index.v1','source':'CPTEC/INPE Nowcasting','generated_at':utcnow(),'frames':[],'error':'Nenhum frame encontrado; consulte discovery.json.','summary':{'catalog_frames_discovered':0,'shard_index':shard_index,'shard_count':shard_count}},ensure_ascii=False,indent=2),encoding='utf-8')
+        (OUT/'errors.json').write_text(json.dumps({'generated_at':utcnow(),'count':0,'errors':[]},ensure_ascii=False,indent=2),encoding='utf-8')
         print('ERRO: nenhum frame encontrado nos endpoints/catalogos descobertos.',file=sys.stderr); return 2
-    print(f'{len(refs)} frames no catálogo; baixando com {WORKERS} workers.')
+    print(f'Catálogo: {catalog_count} frames; partição {shard_index+1}/{shard_count}: {len(refs)} frames; {WORKERS} workers.')
     results=[]
     with concurrent.futures.ThreadPoolExecutor(max_workers=WORKERS) as pool:
         futures=[pool.submit(download,r) for r in sorted(refs)]
@@ -230,13 +241,17 @@ def main():
     results.sort(key=lambda x:(x.get('provider',''),x.get('radar',''),x.get('product_id',''),x.get('timestamp','')))
     good=[r for r in results if r.get('ok')]; bad=[r for r in results if not r.get('ok')]
     index={'schema':'sideral.cptec-nowcasting-index.v1','source':'CPTEC/INPE Nowcasting','source_url':SITE,'generated_at':utcnow(),
-           'summary':{'frames_discovered':len(refs),'frames_downloaded':len(good),'frames_failed':len(bad),'providers':sorted({x['provider'] for x in results}),
+           'summary':{'catalog_frames_discovered':catalog_count,'frames_discovered':len(refs),'frames_downloaded':len(good),'frames_failed':len(bad),
+                      'shard_index':shard_index,'shard_count':shard_count,
+                      'providers':sorted({x['provider'] for x in results}),
                       'radars':sorted({x['provider']+'~'+x['radar'] for x in results}),'products':sorted({x['product_id'] for x in results}),
                       'timestamps':sorted({x['timestamp'] for x in results}),'bytes_downloaded':sum(x.get('bytes',0) for x in good)},'frames':good}
     (OUT/'index.json').write_text(json.dumps(index,ensure_ascii=False,indent=2),encoding='utf-8')
     (OUT/'errors.json').write_text(json.dumps({'generated_at':utcnow(),'count':len(bad),'errors':bad},ensure_ascii=False,indent=2),encoding='utf-8')
     print(json.dumps(index['summary'],ensure_ascii=False,indent=2))
-    if not good: print('ERRO: nenhum frame de imagem pôde ser baixado.',file=sys.stderr); return 3
+    # An empty shard is expected when the live catalog contains fewer frames than shards.
+    if not refs: return 0
+    if not good: print('ERRO: esta partição não conseguiu baixar nenhum frame.',file=sys.stderr); return 3
     return 0
 
 if __name__=='__main__': raise SystemExit(main())
