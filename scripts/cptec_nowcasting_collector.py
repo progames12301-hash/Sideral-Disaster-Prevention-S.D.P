@@ -3,7 +3,8 @@
 from __future__ import annotations
 import concurrent.futures, datetime as dt, hashlib, json, os, re, sys
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit
+from html.parser import HTMLParser
+from urllib.parse import urljoin, urlsplit, unquote, urlunsplit
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -14,7 +15,9 @@ OUT = Path(os.getenv('CPTEC_OUTPUT_DIR', 'cptec-nowcasting-output'))
 WORKERS = max(1, min(int(os.getenv('CPTEC_DOWNLOAD_WORKERS', '8')), 16))
 TIMEOUT = max(5, int(os.getenv('CPTEC_REQUEST_TIMEOUT', '25')))
 MAX_BYTES = 25 * 1024 * 1024
-MAX_ROUTES = 160
+MAX_CATALOG_PAGES = 5000
+CATALOG_PATH = '/api/v1/paths/frames/radar/'
+CATALOG_ROOT = urljoin(SITE, CATALOG_PATH)
 
 SEED_ROUTES = [
     '/api/v1/paths/frames/radar/', '/api/v1/paths/frames/radar',
@@ -125,61 +128,224 @@ def extract(payload):
     walk(payload)
     return refs
 
-def discover():
-    s=session(); diagnostics=[]; routes=set(SEED_ROUTES); json_assets=set()
-    html,info=get_text(s,SITE,limit=4*1024*1024); diagnostics.append({'stage':'frontend_html',**info})
-    if html:
-        assets=[urljoin(SITE,p) for p in SCRIPT_RX.findall(html)][:40]
-        json_assets.update(urljoin(SITE,p) for p in JSON_RX.findall(html))
-        for asset in dict.fromkeys(assets):
-            js,ji=get_text(s,asset); diagnostics.append({'stage':'frontend_js',**ji})
-            if not js: continue
-            for route in API_RX.findall(js):
-                route=re.split(r'\$\{|\{[A-Za-z_]|:[A-Za-z_]',route,maxsplit=1)[0]
-                if route.startswith('/api/v1/') and any(k in route.lower() for k in ('radar','frame','path','product','catalog','metadata','nowcast','instant','time')):
-                    routes.add(route)
-            json_assets.update(urljoin(SITE,p) for p in JSON_RX.findall(js) if p.startswith('/'))
-    s.close()
-    urls=[]
-    for route in sorted(routes):
-        if any(x in route for x in (chr(36)+'{','{',':radar',':product','undefined','null')): continue
-        urls.append(urljoin(SITE,route))
-        if route.rstrip('/') == '/api/v1/paths/frames/radar':
-            urls += [urljoin(SITE,route.rstrip('/')+'?format=json'),urljoin(SITE,route.rstrip('/')+'/index.json')]
-    urls += sorted(json_assets)
-    return list(dict.fromkeys(urls))[:MAX_ROUTES], diagnostics
+class RadarListingParser(HTMLParser):
+    """Read only link targets from the CPTEC path-directory response."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.hrefs = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() != 'a':
+            return
+        for key, value in attrs:
+            if key.lower() == 'href' and value:
+                self.hrefs.append(value.strip())
+
+
+def radar_directory_url(raw, base_url):
+    """Return a safe, known radar-catalog directory URL, never an arbitrary URL."""
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    resolved = urljoin(base_url, raw.strip().replace('&amp;', '&').replace('\\/', '/'))
+    parsed = urlsplit(resolved)
+    site = urlsplit(SITE)
+    if parsed.scheme != 'https' or parsed.hostname != site.hostname:
+        return None
+    marker = '/api/v1/paths/'
+    if marker not in parsed.path:
+        return None
+    tail = unquote(parsed.path.split(marker, 1)[1]).strip('/')
+    parts = tail.split('/')
+    if parts[:2] != ['frames', 'radar']:
+        return None
+    # The exposed hierarchy is frames/radar/<provider~radar~group~variable>/<YYYYMMDDHHmm>/full.
+    # Browse the root, each product directory and each timestamp directory only.
+    if len(parts) == 2:
+        pass
+    elif len(parts) == 3 and re.fullmatch(r'[^/]+~[^/]+~[^/]+~[^/]+', parts[2]):
+        pass
+    elif (len(parts) == 4
+          and re.fullmatch(r'[^/]+~[^/]+~[^/]+~[^/]+', parts[2])
+          and re.fullmatch(r'\d{12}', parts[3])):
+        pass
+    else:
+        return None
+    path = parsed.path.rstrip('/') + '/'
+    return urlunsplit((parsed.scheme, parsed.netloc, path, '', ''))
+
+
+def _catalog_links(payload, base_url):
+    """Extract child directories and concrete frame references from a listing response."""
+    dirs, refs = set(), set()
+
+    def consider(value):
+        if not isinstance(value, str) or not value.strip():
+            return
+        value = value.strip().replace('&amp;', '&').replace('\\/', '/')
+        absolute = urljoin(base_url, value)
+        ref = canon(absolute)
+        if ref:
+            refs.add(ref)
+        directory = radar_directory_url(absolute, base_url)
+        if directory:
+            dirs.add(directory)
+
+    if isinstance(payload, str):
+        parser = RadarListingParser()
+        try:
+            parser.feed(payload)
+        except Exception:
+            pass
+        for href in parser.hrefs:
+            consider(href)
+        # Some index pages embed data paths in scripts rather than anchors.
+        for rx in (FRAME_RX, COMPOSITE_RX):
+            for match in rx.finditer(payload):
+                consider(match.group(0))
+        return dirs, refs
+
+    if isinstance(payload, (dict, list)):
+        refs.update(extract(payload))
+        def walk(value):
+            if isinstance(value, str):
+                # Only matching paths on the same CPTEC host survive the guards above.
+                consider(value)
+            elif isinstance(value, dict):
+                for child in value.values():
+                    walk(child)
+            elif isinstance(value, list):
+                for child in value:
+                    walk(child)
+        walk(payload)
+    return dirs, refs
+
+
+def _read_catalog_page(url):
+    s = session()
+    try:
+        body, info = get_text(s, url, limit=12 * 1024 * 1024, timeout=min(20, TIMEOUT))
+    finally:
+        s.close()
+
+    dirs, refs = set(), set()
+    own_ref = canon(url)
+    if own_ref:
+        refs.add(own_ref)
+    if not body:
+        return dirs, refs, info
+
+    content_type = str(info.get('content_type', '')).lower()
+    if 'json' in content_type or body.lstrip().startswith(('{', '[')):
+        try:
+            payload = json.loads(body)
+            dirs, refs_from_payload = _catalog_links(payload, url)
+            refs.update(refs_from_payload)
+            info['response_kind'] = 'json-listing'
+        except json.JSONDecodeError:
+            dirs, refs_from_payload = _catalog_links(body, url)
+            refs.update(refs_from_payload)
+            info['response_kind'] = 'text-listing'
+    elif 'html' in content_type or '<a' in body.lower() or '<html' in body.lower():
+        dirs, refs_from_payload = _catalog_links(body, url)
+        refs.update(refs_from_payload)
+        info['response_kind'] = 'html-directory-listing'
+    else:
+        # Direct image responses are valid leaf objects, not catalog pages to recurse into.
+        info['response_kind'] = 'non-listing-response'
+        if not own_ref:
+            info['response_preview'] = body[:160]
+    return dirs, refs, info
+
 
 def catalog():
-    urls, frontdiag=discover(); s=session(); refs=set(); diag=[]; i=0
-    while i < len(urls) and i < MAX_ROUTES:
-        url=urls[i]; i+=1
-        body,info=get_text(s,url,limit=12*1024*1024,timeout=min(12,TIMEOUT))
-        row={'stage':'catalog_probe',**info}
-        if body:
-            text=body.lstrip(); is_html='text/html' in info.get('content_type','').lower() or text.lower().startswith(('<!doctype html','<html'))
-            if not is_html:
+    """Walk the actual CPTEC radar path tree instead of probing guessed API endpoints."""
+    pending = [CATALOG_ROOT]
+    queued = {CATALOG_ROOT}
+    visited = set()
+    refs = set()
+    diagnostics = []
+    pages_with_children = 0
+    page_limit_reached = False
+
+    while pending and len(visited) < MAX_CATALOG_PAGES:
+        batch = []
+        while pending and len(batch) < 32 and len(visited) + len(batch) < MAX_CATALOG_PAGES:
+            url = pending.pop(0)
+            if url not in visited:
+                visited.add(url)
+                batch.append(url)
+        if not batch:
+            break
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(WORKERS, 8)) as pool:
+            futures = {pool.submit(_read_catalog_page, url): url for url in batch}
+            for future in concurrent.futures.as_completed(futures):
+                url = futures[future]
                 try:
-                    data=json.loads(body); found=extract(data); refs.update(found)
-                    row['frame_refs_found']=len(found)
-                    # OpenAPI discovery: enqueue useful static GET routes.
-                    if isinstance(data,dict) and isinstance(data.get('paths'),dict):
-                        for route,ops in data['paths'].items():
-                            if isinstance(route,str) and isinstance(ops,dict) and any(str(k).lower()=='get' for k in ops) and '{' not in route and any(k in route.lower() for k in ('radar','frame','path','product','catalog','metadata','nowcast','instant','time')):
-                                u=urljoin(SITE,route)
-                                if u not in urls and len(urls)<MAX_ROUTES: urls.append(u)
-                except json.JSONDecodeError:
-                    found=set()
-                    for rx in (FRAME_RX,COMPOSITE_RX):
-                        for m in rx.finditer(body):
-                            r=canon(m.group(0))
-                            if r: found.add(r)
-                    refs.update(found); row['frame_refs_found']=len(found)
-                    if not found: row['preview']=body[:180]
-            else: row['shape']='html'
-        diag.append(row)
-        if len(refs)>100000: break
-    s.close()
-    return refs, {'started_at':utcnow(),'site':SITE,'api_base':API,'catalog_urls_tested':i,'frontend_diagnostics':frontdiag,'catalog_diagnostics':diag}
+                    child_dirs, found_refs, info = future.result()
+                except Exception as exc:
+                    child_dirs, found_refs = set(), set()
+                    info = {'url': url, 'error': f'{type(exc).__name__}: {exc}'}
+                refs.update(found_refs)
+                if child_dirs:
+                    pages_with_children += 1
+                for child in sorted(child_dirs):
+                    if child not in queued and child not in visited:
+                        queued.add(child)
+                        pending.append(child)
+                diagnostics.append({
+                    'url': info.get('url', url),
+                    'status': info.get('status'),
+                    'content_type': info.get('content_type'),
+                    'response_kind': info.get('response_kind'),
+                    'child_directories': len(child_dirs),
+                    'frames_found': len(found_refs),
+                    'error': info.get('error'),
+                    'response_preview': info.get('response_preview'),
+                })
+        print(f'[CATALOGO CPTEC] pastas visitadas: {len(visited)}; quadros identificados: {len(refs)}')
+
+    if pending:
+        page_limit_reached = True
+
+    # Derive the catalog table from the real path IDs found in CPTEC listings.
+    products = {}
+    for ref in refs:
+        m = re.search(r'frames/radar/([^/]+)/(\d{12})/full$', ref)
+        if not m:
+            continue
+        identifier = m.group(1)
+        fields = identifier.split('~')
+        if len(fields) != 4:
+            continue
+        provider, radar, group, variable = fields
+        row = products.setdefault(identifier, {
+            'product_id': identifier, 'provider': provider, 'radar': radar,
+            'group': group, 'variable': variable, 'timestamps': []
+        })
+        row['timestamps'].append(m.group(2))
+    product_rows = sorted(products.values(), key=lambda row: row['product_id'])
+    for row in product_rows:
+        row['timestamps'] = sorted(set(row['timestamps']))
+
+    metadata = {
+        'started_at': utcnow(),
+        'site': SITE,
+        'catalog_root': CATALOG_ROOT,
+        'listing_strategy': 'recursive directory traversal of /api/v1/paths/frames/radar/',
+        'pages_visited': len(visited),
+        'pages_with_children': pages_with_children,
+        'candidate_frames': len(refs),
+        'products': product_rows,
+        'providers': sorted({row['provider'] for row in product_rows}),
+        'radars': sorted({row['provider'] + '~' + row['radar'] for row in product_rows}),
+        'page_limit': MAX_CATALOG_PAGES,
+        'page_limit_reached': page_limit_reached,
+        'diagnostics': diagnostics,
+        'generated_at': utcnow(),
+    }
+    return refs, metadata
+
 
 def parse_ref(ref):
     m=re.search(r'frames/radar/([^/]+)/([0-9]{12})/full$',ref)
