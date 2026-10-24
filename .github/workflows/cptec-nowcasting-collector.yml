@@ -1,12 +1,7 @@
-name: CPTEC Nowcasting — teste imediato
+name: CPTEC Nowcasting — catálogo completo e coleta
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/cptec-nowcasting-collector.yml"
-      - "scripts/cptec_nowcasting_collector.py"
   schedule:
     - cron: "17 * * * *"
 
@@ -30,7 +25,10 @@ jobs:
       - name: Instalar dependência HTTP
         run: python -m pip install --disable-pip-version-check requests
 
-      - name: Descobrir e coletar todos os quadros anunciados pela API
+      - name: Testar o formato das URLs e a navegação do catálogo
+        run: python cptec-runner/test_catalog.py
+
+      - name: Descobrir e coletar os quadros da árvore real do CPTEC
         id: collect
         continue-on-error: true
         env:
@@ -39,7 +37,7 @@ jobs:
           CPTEC_REQUEST_TIMEOUT: "25"
           CPTEC_SHARD_INDEX: "0"
           CPTEC_SHARD_COUNT: "1"
-        run: python scripts/cptec_nowcasting_collector.py
+        run: python cptec-runner/collector.py
 
       - name: Salvar imagens, catálogo e diagnóstico
         if: always()
@@ -54,5 +52,5 @@ jobs:
       - name: Informar falha da coleta
         if: steps.collect.outcome != 'success'
         run: |
-          echo "O coletor terminou com erro. Consulte o artefato para ver discovery.json e errors.json."
+          echo "A descoberta/coleta falhou. Consulte discovery.json para status HTTP, pastas e respostas reais da API."
           exit 1
