@@ -1,4 +1,4 @@
-name: CPTEC Nowcasting — coleta de todos os radares e produtos
+name: CPTEC Nowcasting — coleta paralela de todos os radares e produtos
 
 on:
   workflow_dispatch:
@@ -15,7 +15,11 @@ concurrency:
 
 jobs:
   collect:
-    name: Descobrir catálogo e baixar imagens disponíveis
+    name: Coletar partição ${{ matrix.shard }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -30,16 +34,136 @@ jobs:
       - name: Instalar dependência HTTP
         run: python -m pip install --disable-pip-version-check requests
 
-      - name: Descobrir provedores, radares, produtos e horários; baixar todos os frames listados
+      - name: Descobrir o catálogo e baixar a partição desta máquina
         id: collect
         continue-on-error: true
         env:
           CPTEC_OUTPUT_DIR: cptec-nowcasting-output
-          CPTEC_DOWNLOAD_WORKERS: "8"
+          CPTEC_DOWNLOAD_WORKERS: "4"
           CPTEC_REQUEST_TIMEOUT: "25"
+          CPTEC_SHARD_INDEX: "${{ matrix.shard }}"
+          CPTEC_SHARD_COUNT: "4"
         run: python scripts/cptec_nowcasting_collector.py
 
-      - name: Salvar inventário, imagens e diagnóstico como artefato
+      - name: Enviar arquivos desta partição
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cptec-nowcasting-${{ github.run_number }}-shard-${{ matrix.shard }}
+          path: cptec-nowcasting-output/
+          if-no-files-found: warn
+          retention-days: 2
+          compression-level: 0
+
+      - name: Sinalizar erro para consolidação
+        if: steps.collect.outcome != 'success'
+        run: |
+          echo "A partição ${{ matrix.shard }} falhou. Os diagnósticos foram enviados, se disponíveis."
+          exit 1
+
+  merge:
+    name: Consolidar imagens e inventário
+    if: always()
+    needs: collect
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Baixar as partições concluídas
+        uses: actions/download-artifact@v4
+        with:
+          pattern: cptec-nowcasting-${{ github.run_number }}-shard-*
+          path: shard-artifacts
+          merge-multiple: false
+          if-no-artifact-found: warn
+
+      - name: Reunir arquivos em um único inventário
+        run: |
+          python - <<'PY'
+          import json, re, shutil
+          from pathlib import Path
+          root = Path("shard-artifacts")
+          out = Path("cptec-nowcasting-output")
+          (out / "frames").mkdir(parents=True, exist_ok=True)
+          frames = {}
+          errors = []
+          discoveries = []
+          totals = []
+          received = set()
+          for folder in sorted(root.iterdir()) if root.exists() else []:
+              if not folder.is_dir():
+                  continue
+              match = re.search(r"-shard-(\d+)$", folder.name)
+              if match:
+                  received.add(int(match.group(1)))
+              index_path = folder / "index.json"
+              if index_path.exists():
+                  try:
+                      idx = json.loads(index_path.read_text(encoding="utf-8"))
+                      totals.append(idx.get("summary", {}))
+                      for frame in idx.get("frames", []):
+                          frames[frame.get("api_path") or frame.get("file")] = frame
+                  except Exception as exc:
+                      errors.append({"source": str(index_path), "error": str(exc)})
+              err_path = folder / "errors.json"
+              if err_path.exists():
+                  try:
+                      errors.extend(json.loads(err_path.read_text(encoding="utf-8")).get("errors", []))
+                  except Exception as exc:
+                      errors.append({"source": str(err_path), "error": str(exc)})
+              disc_path = folder / "discovery.json"
+              if disc_path.exists() and not discoveries:
+                  try:
+                      discoveries.append(json.loads(disc_path.read_text(encoding="utf-8")))
+                  except Exception as exc:
+                      errors.append({"source": str(disc_path), "error": str(exc)})
+              src_frames = folder / "frames"
+              if src_frames.exists():
+                  for src in src_frames.rglob("*"):
+                      if src.is_file():
+                          dst = out / "frames" / src.relative_to(src_frames)
+                          dst.parent.mkdir(parents=True, exist_ok=True)
+                          if not dst.exists():
+                              shutil.copy2(src, dst)
+          all_frames = sorted(frames.values(), key=lambda x: (
+              x.get("provider", ""), x.get("radar", ""), x.get("product_id", ""), x.get("timestamp", "")))
+          catalog_count = max((int(s.get("catalog_frames_discovered", 0)) for s in totals), default=0)
+          downloaded_bytes = sum(int(x.get("bytes", 0)) for x in all_frames if x.get("ok"))
+          provider_names = sorted({x.get("provider", "unknown") for x in all_frames})
+          radar_names = sorted({x.get("provider", "unknown") + "~" + x.get("radar", "unknown") for x in all_frames})
+          products = sorted({x.get("product_id", "unknown") for x in all_frames})
+          timestamps = sorted({x.get("timestamp", "unknown") for x in all_frames})
+          summary = {
+              "catalog_frames_discovered": catalog_count,
+              "shards_received": len(received),
+              "shards_expected": 4,
+              "missing_shards": sorted(set(range(4)) - received),
+              "frames_downloaded": len(all_frames),
+              "frames_failed": len(errors),
+              "providers": provider_names,
+              "radars": radar_names,
+              "products": products,
+              "timestamps": timestamps,
+              "bytes_downloaded": downloaded_bytes,
+          }
+          index = {
+              "schema": "sideral.cptec-nowcasting-index.v1",
+              "source": "CPTEC/INPE Nowcasting",
+              "source_url": "https://nowcasting.cptec.inpe.br/",
+              "generated_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+              "summary": summary,
+              "frames": all_frames,
+          }
+          (out / "index.json").write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
+          (out / "errors.json").write_text(json.dumps({
+              "count": len(errors), "missing_shards": summary["missing_shards"], "errors": errors
+          }, ensure_ascii=False, indent=2), encoding="utf-8")
+          (out / "discovery.json").write_text(json.dumps(
+              discoveries[0] if discoveries else {"error": "Nenhum diagnóstico de descoberta foi recebido."},
+              ensure_ascii=False, indent=2), encoding="utf-8")
+          print(json.dumps(summary, ensure_ascii=False, indent=2))
+          PY
+
+      - name: Enviar inventário unificado
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -47,11 +171,10 @@ jobs:
           path: cptec-nowcasting-output/
           if-no-files-found: warn
           retention-days: 30
-          # PNG/JPEG já são comprimidos; evita gastar tempo comprimindo novamente.
           compression-level: 0
 
-      - name: Sinalizar falha da coleta no status do workflow
-        if: steps.collect.outcome != 'success'
+      - name: Marcar workflow como falho se alguma partição falhou
+        if: needs.collect.result != 'success'
         run: |
-          echo "A coleta não terminou com sucesso. O artefato foi enviado para diagnóstico, se foi possível gerar arquivos."
+          echo "Uma ou mais partições falharam. O artefato unificado mantém os diagnósticos disponíveis."
           exit 1
