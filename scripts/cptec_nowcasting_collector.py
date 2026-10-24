@@ -215,7 +215,13 @@ def download(ref):
 
 def main():
     OUT.mkdir(parents=True,exist_ok=True)
-    all_refs,discovery=catalog()
+    catalog_input=os.getenv('CPTEC_CATALOG_INPUT')
+    if catalog_input:
+        catalog_data=json.loads(Path(catalog_input).read_text(encoding='utf-8'))
+        all_refs=set(catalog_data.get('refs',[]))
+        discovery=catalog_data.get('discovery',{})
+    else:
+        all_refs,discovery=catalog()
     ordered_refs=sorted(all_refs)
     catalog_count=len(ordered_refs)
     shard_count=max(1,min(int(os.getenv('CPTEC_SHARD_COUNT','1')),16))
@@ -227,6 +233,12 @@ def main():
     discovery['shard']={'index':shard_index,'count':shard_count,'assigned_frames':len(refs)}
     discovery['generated_at']=utcnow()
     (OUT/'discovery.json').write_text(json.dumps(discovery,ensure_ascii=False,indent=2),encoding='utf-8')
+    if os.getenv('CPTEC_DISCOVERY_ONLY','0') == '1':
+        (OUT/'catalog.json').write_text(json.dumps({'refs':ordered_refs,'discovery':discovery},ensure_ascii=False,indent=2),encoding='utf-8')
+        print(f'Catálogo descoberto: {catalog_count} frames.')
+        if not all_refs:
+            print('ATENÇÃO: nenhum frame encontrado; veja discovery.json.',file=sys.stderr)
+        return 0
     if not all_refs:
         (OUT/'index.json').write_text(json.dumps({'schema':'sideral.cptec-index.v1','source':'CPTEC/INPE Nowcasting','generated_at':utcnow(),'frames':[],'error':'Nenhum frame encontrado; consulte discovery.json.','summary':{'catalog_frames_discovered':0,'shard_index':shard_index,'shard_count':shard_count}},ensure_ascii=False,indent=2),encoding='utf-8')
         (OUT/'errors.json').write_text(json.dumps({'generated_at':utcnow(),'count':0,'errors':[]},ensure_ascii=False,indent=2),encoding='utf-8')
