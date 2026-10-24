@@ -20,7 +20,7 @@ CATALOG_ROOT = urljoin(SITE, CATALOG_PATH)
 
 FRAME_RX = re.compile(r'(?:https?://[^\s\"\'<>]+)?/?(?:api/v1/paths/)?(frames/radar/[^\s\"\'<>?#]+)', re.I)
 COMPOSITE_RX = re.compile(r'([A-Za-z0-9_.-]+~[A-Za-z0-9_.-]+~[A-Za-z0-9_.-]+~[A-Za-z0-9_.-]+)/(\d{12})/(?:full|original|large|medium|small|thumbnail)?', re.I)
-API_RX = re.compile(r"""["`](/api/v1/[A-Za-z0-9_./?=&%{}:$~-]+)["`]""")
+API_RX = re.compile(r"""["'`](/api/v1/[A-Za-z0-9_./?=&%{}:$~-]+)["'`]""")
 SCRIPT_RX = re.compile(r'(?:src|href)=[\"\']([^\"\']+\.(?:m?js)(?:\?[^\"\']*)?)[\"\']', re.I)
 JSON_RX = re.compile(r'(?:src|href)=[\"\']([^\"\']+\.(?:json|geojson)(?:\?[^\"\']*)?)[\"\']', re.I)
 
