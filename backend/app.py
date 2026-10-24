@@ -11,7 +11,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from backend.catalog import CatalogWatcher
@@ -24,6 +24,7 @@ from backend.seismic.seedlink import SeedLinkCollector
 from backend.seismic.stations import Station, fetch_source_stations
 from backend.seismic.synthetic_test import run_rj_waveform_test
 from backend.state import SystemState, utc_iso
+from backend.cptec_nowcasting import catalog_snapshot, fetch_frame, start_catalog_refresh
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = BASE_DIR / "web"
@@ -136,6 +137,8 @@ def bootstrap_streaming() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     stop_event.clear()
+    # Radar catalog refresh runs inside the Render service, not a GitHub Actions runner.
+    start_catalog_refresh(stop_event)
     task = asyncio.create_task(dispatcher())
     bootstrap_thread = threading.Thread(target=bootstrap_streaming, name="bootstrap", daemon=True)
     bootstrap_thread.start()
@@ -191,6 +194,31 @@ def health() -> dict:
 @app.get("/api/live")
 def live() -> dict:
     return {"ok": True, "version": "0.4.1", "time": utc_iso()}
+
+
+@app.get("/api/cptec-nowcasting/catalog")
+def cptec_nowcasting_catalog() -> dict:
+    """Live cached inventory of CPTEC Nowcasting radars, products and recent frames."""
+    return catalog_snapshot()
+
+
+@app.get("/api/cptec-nowcasting/frame")
+def cptec_nowcasting_frame(product: str, timestamp: str):
+    """Image proxy for one validated official CPTEC frame; no runner is required."""
+    try:
+        body, media_type = fetch_frame(product, timestamp)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return Response(
+        content=body,
+        media_type=media_type,
+        headers={
+            "Cache-Control": "public, max-age=180",
+            "X-Radar-Source": "CPTEC/INPE Nowcasting",
+        },
+    )
 
 
 @app.get("/api/ready")
@@ -322,6 +350,16 @@ def simulate_event() -> dict:
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(WEB_DIR / "index.html")
+
+
+@app.get("/radar")
+def cptec_nowcasting_page() -> FileResponse:
+    return FileResponse(WEB_DIR / "cptec-nowcasting.html")
+
+
+@app.get("/radar/multicamadas")
+def multi_source_radar_page() -> FileResponse:
+    return FileResponse(WEB_DIR / "radar.html")
 
 
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
