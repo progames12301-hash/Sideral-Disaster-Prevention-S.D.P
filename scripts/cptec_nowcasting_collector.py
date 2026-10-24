@@ -19,16 +19,6 @@ MAX_CATALOG_PAGES = 5000
 CATALOG_PATH = '/api/v1/paths/frames/radar/'
 CATALOG_ROOT = urljoin(SITE, CATALOG_PATH)
 
-SEED_ROUTES = [
-    '/api/v1/paths/frames/radar/', '/api/v1/paths/frames/radar',
-    '/api/v1/paths/frames/radar/index.json', '/api/v1/paths/frames/radar/catalog.json',
-    '/api/v1/paths/frames/', '/api/v1/paths/', '/api/v1/paths',
-    '/api/v1/radars', '/api/v1/radar', '/api/v1/radar/frames', '/api/v1/radar/products',
-    '/api/v1/frames/radar', '/api/v1/frames', '/api/v1/products/radar', '/api/v1/products',
-    '/api/v1/catalog/radar', '/api/v1/catalog', '/api/v1/metadata/radar', '/api/v1/metadata',
-    '/api/v1/nowcasting/radars', '/api/v1/nowcasting/catalog', '/api/v1/openapi.json',
-    '/openapi.json', '/swagger.json', '/frames/radar/index.json', '/data/frames/radar/index.json',
-]
 FRAME_RX = re.compile(r'(?:https?://[^\s\"\'<>]+)?/?(?:api/v1/paths/)?(frames/radar/[^\s\"\'<>?#]+)', re.I)
 COMPOSITE_RX = re.compile(r'([A-Za-z0-9_.-]+~[A-Za-z0-9_.-]+~[A-Za-z0-9_.-]+~[A-Za-z0-9_.-]+)/(\d{12})/(?:full|original|large|medium|small|thumbnail)?', re.I)
 API_RX = re.compile(r'[\"\'](\/api\/v1\/[A-Za-z0-9_./?=&%{}:$-]+)[\"\']')
@@ -182,6 +172,8 @@ def _catalog_links(payload, base_url):
         if not isinstance(value, str) or not value.strip():
             return
         value = value.strip().replace('&amp;', '&').replace('\\/', '/')
+        if value.lstrip('/').startswith('frames/radar/'):
+            value = '/api/v1/paths/' + value.lstrip('/')
         absolute = urljoin(base_url, value)
         ref = canon(absolute)
         if ref:
@@ -257,12 +249,85 @@ def _read_catalog_page(url):
     return dirs, refs, info
 
 
+def frontend_catalog_sources():
+    """Inspect only the actual CPTEC Nowcasting page and assets it references."""
+    session_obj = session()
+    diagnostics = []
+    frame_refs = set()
+    directories = set()
+    exact_data_urls = set()
+    script_urls = set()
+    json_urls = set()
+
+    html, info = get_text(session_obj, SITE, limit=4 * 1024 * 1024)
+    diagnostics.append({'stage': 'frontend_html', **info})
+    if html:
+        child_dirs, found_refs = _catalog_links(html, SITE)
+        directories.update(child_dirs)
+        frame_refs.update(found_refs)
+
+        for asset in SCRIPT_RX.findall(html):
+            url = urljoin(SITE, asset)
+            parsed = urlsplit(url)
+            if parsed.scheme == 'https' and parsed.hostname == urlsplit(SITE).hostname:
+                script_urls.add(url)
+        for asset in JSON_RX.findall(html):
+            url = urljoin(SITE, asset)
+            parsed = urlsplit(url)
+            if parsed.scheme == 'https' and parsed.hostname == urlsplit(SITE).hostname:
+                json_urls.add(url)
+
+    # Read only same-origin assets referenced by the real frontend; never invent routes.
+    for asset_url in sorted(script_urls)[:40]:
+        body, asset_info = get_text(session_obj, asset_url, limit=8 * 1024 * 1024)
+        diagnostics.append({'stage': 'frontend_script', **asset_info})
+        if not body:
+            continue
+        child_dirs, found_refs = _catalog_links(body, asset_url)
+        directories.update(child_dirs)
+        frame_refs.update(found_refs)
+
+        for raw_route in API_RX.findall(body):
+            route = raw_route.strip()
+            if not route.startswith('/api/v1/'):
+                continue
+            if chr(36) + '{' in route or '{' in route or '}' in route or ':param' in route or 'undefined' in route:
+                continue
+            if not any(token in route.lower() for token in (
+                'radar', 'frame', 'path', 'product', 'catalog', 'metadata', 'instant', 'time'
+            )):
+                continue
+            route_url = urljoin(SITE, route)
+            directory_url = radar_directory_url(route_url, SITE)
+            if directory_url:
+                directories.add(directory_url)
+            else:
+                exact_data_urls.add(route_url)
+
+    for asset_url in sorted(json_urls)[:40]:
+        body, asset_info = get_text(session_obj, asset_url, limit=12 * 1024 * 1024)
+        diagnostics.append({'stage': 'frontend_json_asset', **asset_info})
+        if not body:
+            continue
+        try:
+            payload = json.loads(body)
+            child_dirs, found_refs = _catalog_links(payload, asset_url)
+        except json.JSONDecodeError:
+            child_dirs, found_refs = _catalog_links(body, asset_url)
+        directories.update(child_dirs)
+        frame_refs.update(found_refs)
+
+    session_obj.close()
+    return directories, frame_refs, exact_data_urls, diagnostics
+
+
 def catalog():
-    """Walk the actual CPTEC radar path tree instead of probing guessed API endpoints."""
-    pending = [CATALOG_ROOT]
-    queued = {CATALOG_ROOT}
+    """Build the catalog from CPTEC's real path tree and frontend-linked data sources."""
+    frontend_dirs, frontend_refs, exact_data_urls, frontend_diagnostics = frontend_catalog_sources()
+    pending = [CATALOG_ROOT, *sorted(frontend_dirs), *sorted(exact_data_urls)]
+    queued = set(pending)
     visited = set()
-    refs = set()
+    refs = set(frontend_refs)
     diagnostics = []
     pages_with_children = 0
     page_limit_reached = False
@@ -303,12 +368,11 @@ def catalog():
                     'error': info.get('error'),
                     'response_preview': info.get('response_preview'),
                 })
-        print(f'[CATALOGO CPTEC] pastas visitadas: {len(visited)}; quadros identificados: {len(refs)}')
+        print(f'[CATALOGO CPTEC] pastas/fontes visitadas: {len(visited)}; quadros identificados: {len(refs)}')
 
     if pending:
         page_limit_reached = True
 
-    # Derive the catalog table from the real path IDs found in CPTEC listings.
     products = {}
     for ref in refs:
         m = re.search(r'frames/radar/([^/]+)/(\d{12})/full$', ref)
@@ -332,7 +396,12 @@ def catalog():
         'started_at': utcnow(),
         'site': SITE,
         'catalog_root': CATALOG_ROOT,
-        'listing_strategy': 'recursive directory traversal of /api/v1/paths/frames/radar/',
+        'discovery_strategy': [
+            'walk /api/v1/paths/frames/radar/ as a real hierarchy',
+            'inspect same-origin frontend scripts and JSON assets actually linked by CPTEC',
+            'follow only API routes explicitly found in those assets'
+        ],
+        'frontend_diagnostics': frontend_diagnostics,
         'pages_visited': len(visited),
         'pages_with_children': pages_with_children,
         'candidate_frames': len(refs),
