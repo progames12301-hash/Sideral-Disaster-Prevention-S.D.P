@@ -20,7 +20,7 @@ CATALOG_ROOT = urljoin(SITE, CATALOG_PATH)
 
 FRAME_RX = re.compile(r'(?:https?://[^\s\"\'<>]+)?/?(?:api/v1/paths/)?(frames/radar/[^\s\"\'<>?#]+)', re.I)
 COMPOSITE_RX = re.compile(r'([A-Za-z0-9_.-]+~[A-Za-z0-9_.-]+~[A-Za-z0-9_.-]+~[A-Za-z0-9_.-]+)/(\d{12})/(?:full|original|large|medium|small|thumbnail)?', re.I)
-API_RX = re.compile(r'[\"\'](\/api\/v1\/[A-Za-z0-9_./?=&%{}:$~-]+)[\"\']')
+API_RX = re.compile(r"""["`](/api/v1/[A-Za-z0-9_./?=&%{}:$~-]+)["`]""")
 SCRIPT_RX = re.compile(r'(?:src|href)=[\"\']([^\"\']+\.(?:m?js)(?:\?[^\"\']*)?)[\"\']', re.I)
 JSON_RX = re.compile(r'(?:src|href)=[\"\']([^\"\']+\.(?:json|geojson)(?:\?[^\"\']*)?)[\"\']', re.I)
 
@@ -290,13 +290,17 @@ def frontend_catalog_sources():
             route = raw_route.strip()
             if not route.startswith('/api/v1/'):
                 continue
-            if chr(36) + '{' in route or '{' in route or '}' in route or ':param' in route or 'undefined' in route:
+            if chr(36) + '{' in route or '{' in route or '}' in route or re.search(r':[A-Za-z_][A-Za-z0-9_]*', route) or 'undefined' in route:
                 continue
             if not any(token in route.lower() for token in (
                 'radar', 'frame', 'path', 'product', 'catalog', 'metadata', 'instant', 'time'
             )):
                 continue
             route_url = urljoin(SITE, route)
+            frame_ref = canon(route_url)
+            if frame_ref:
+                frame_refs.add(frame_ref)
+                continue
             directory_url = radar_directory_url(route_url, SITE)
             if directory_url:
                 directories.add(directory_url)
