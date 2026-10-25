@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAMeT / CPTEC | Sideral Meteorologia</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gif.js.optimized@1.0.1/dist/gif.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/netcdfjs@0.6.2/dist/netcdfjs.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        header {
+            background-color: #f8f7f7;
+            border-bottom: 3px solid #000;
+            padding: 10px 25px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 50px;
+            box-sizing: border-box;
+            z-index: 1000;
+        }
+
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 100%;
+        }
+
+        .menu {
+            width: 28px;
+            height: 22px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            cursor: pointer;
+        }
+
+        .menu span {
+            width: 28px;
+            height: 3px;
+            background-color: #000;
+            border-radius: 3px;
+            transition: 0.3s ease;
+        }
+
+        .menu:hover span {
+            opacity: 0.65;
+        }
+
+        .menu.ativo span:nth-child(1) {
+            transform: translateY(9.5px) rotate(45deg);
+        }
+
+        .menu.ativo span:nth-child(2) {
+            opacity: 0;
+            transform: scaleX(0);
+        }
+
+        .menu.ativo span:nth-child(3) {
+            transform: translateY(-9.5px) rotate(-45deg);
+        }
+
+        .links {
+            display: flex;
+            align-items: center;
+            gap: 25px;
+        }
+
+        .links a {
+            position: relative;
+            color: #000;
+            text-decoration: none;
+            font-size: 14px;
+            padding: 5px 2px;
+            transition: 0.2s ease;
+        }
+
+        .links a::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: 0;
+            width: 0;
+            height: 2px;
+            background-color: #000;
+            transition: 0.25s ease;
+            transform: translateX(-50%);
+        }
+
+        .links a:hover {
+            transform: translateY(-2px);
+        }
+
+        .links a:hover::after {
+            width: 100%;
+        }
+
+        .links a:active {
+            transform: scale(0.92);
+        }
+
+        .sidebar {
+            position: fixed;
+            top: 50px;
+            left: -280px;
+            width: 250px;
+            height: calc(100vh - 50px);
+            background-color: #f8f7f7;
+            border-right: 2px solid #000;
+            transition: left 0.3s ease;
+            z-index: 900;
+            padding: 25px;
+            box-sizing: border-box;
+        }
+
+        .sidebar.ativa {
+            left: 0;
+        }
+
+        .sidebar a {
+            display: block;
+            color: #000;
+            text-decoration: none;
+            padding: 12px 10px;
+            margin-bottom: 5px;
+            transition: 0.2s ease;
+        }
+
+        .sidebar a:hover {
+            background-color: #e5e5e5;
+            padding-left: 16px;
+        }
+
+        .sidebar a:active {
+            transform: scale(0.96);
+        }
+
+        .main {
+            margin-top: 50px;
+            padding: 30px 25px;
+            min-height: calc(100vh - 50px);
+        }
+
+        @media (max-width: 900px) {
+            .links {
+                display: none;
+            }
+
+            .main {
+                padding: 20px;
+            margin-top: 50px;
+        }
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        
+        
+        
+
+        .main-content {
+            margin-left: 320px;
+            height: 100vh;
+            display: flex; flex-direction: column;
+        }
+
+        
+
+        .map-container {
+            flex: 1;
+            position: relative;
+            background: #cbd5e1;
+            padding: 1rem;
+        }
+
+        #map { width: 100%; height: 100%; z-index: 1; border-radius: 8px; }
+
+        .control-panel { padding: 1.25rem; border-bottom: 1px solid #e4e4e7; }
+        .control-panel { position: fixed; top: 50px; left: 0; bottom: 0; width: 320px; overflow-y: auto; background: #fff; z-index: 10; }
+        .info-panel { padding: 1.25rem; border-top: 1px solid #e4e4e7; }
+        .nav-section { margin: 1rem 0 0.5rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; }
+        .nav-menu { list-style: none; margin: 0; padding: 0; }
+        .nav-link { display: flex; align-items: center; gap: 0.45rem; color: #334155; text-decoration: none; padding: 0.55rem 0; font-size: 0.8rem; }
+        .nav-link:hover { color: #2563eb; }
+        @media (max-width: 900px) {
+            .main-content { margin-left: 0; }
+            .control-panel { position: relative; top: auto; width: 100%; max-width: 100vw; max-height: none; margin-top: 50px; }
+            .info-panel .flex.justify-between { gap: 0.5rem; flex-wrap: wrap; }
+            .info-panel .flex.justify-between > span:last-child { text-align: right; overflow-wrap: anywhere; }
+            body { overflow-x: hidden; }
+        }
+        
+        .section-title {
+            font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em;
+            color: #64748b; font-weight: 800; margin-bottom: 0.75rem;
+        }
+
+        .form-group { margin-bottom: 1rem; }
+        .form-label { display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 0.4rem; }
+
+        .form-select {
+            width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #cbd5e1;
+            border-radius: 8px; font-size: 0.85rem; background: white;
+        }
+        .form-select:focus { outline: none; border-color: #2563eb; }
+
+        .btn {
+            padding: 0.7rem 1.25rem; border-radius: 6px; font-weight: 600; font-size: 0.85rem;
+            cursor: pointer; transition: all 0.2s; border: none;
+            display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%;
+        }
+        .btn-primary { background: #2563eb; color: white; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-primary:disabled { background: #93c5fd; cursor: not-allowed; }
+        
+        .btn-success { background: #16a34a; color: white; margin-top: 0.5rem; }
+        .btn-success:hover { background: #15803d; }
+        .btn-success:disabled { background: #86efac; cursor: not-allowed; }
+
+        .logo-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; padding-bottom: 1rem; border-bottom: 1px solid #e4e4e7; }
+        .logo-header img { height: 100px; }
+        .logo-header span { font-weight: 900; font-size: 1.1rem; color: #0f172a; }
+
+        .progress-bar {
+            width: 100%; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; margin-top: 0.5rem;
+        }
+        .progress-fill {
+            height: 100%; background: #2563eb; transition: width 0.3s ease;
+        }
+
+        .region-selector {
+            background: #fef3c7;
+            border: 2px dashed #f59e0b;
+            border-radius: 6px;
+            padding: 0.75rem;
+            margin-top: 0.75rem;
+            font-size: 0.8rem;
+        }
+        .region-selector.active { background: #dbeafe; border-color: #3b82f6; }
+        .region-selector.completed { background: #d1fae5; border-color: #22c55e; }
+
+        .error-message {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 0.6rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+        }
+
+        .export-modal {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+            display: flex; align-items: center; justify-content: center; z-index: 3000;
+            opacity: 0; visibility: hidden; transition: all 0.3s;
+        }
+        .export-modal.active { opacity: 1; visibility: visible; }
+        .export-content {
+            background: white; border-radius: 12px; padding: 1.5rem; max-width: 95%; width: 1400px;
+            max-height: 95vh; overflow-y: auto;
+        }
+    </style>
+<style>
+  .sideral-site-footer { width: 100%; margin-top: 40px; padding: 0; background: linear-gradient(180deg, #0b1220 0%, #0f172a 60%, #0a0f1a 100%); color: #e5e7eb; border-top: 1px solid rgba(85, 199, 206, 0.25); font-family: 'Inter', 'Segoe UI', Arial, sans-serif; position: relative; overflow: hidden; }
+  .sideral-site-footer::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, transparent, #55c7ce, #3b82f6, #55c7ce, transparent); opacity: 0.7; }
+  .sideral-site-footer::after { content: ''; position: absolute; top: -60px; right: -60px; width: 200px; height: 200px; background: radial-gradient(circle, rgba(85, 199, 206, 0.08), transparent 70%); pointer-events: none; }
+  .sideral-footer-inner { max-width: 1120px; margin: 0 auto; padding: 28px 20px 20px; position: relative; z-index: 1; }
+  .sideral-footer-title { margin: 0 0 16px; font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: #55c7ce; display: flex; align-items: center; gap: 10px; }
+  .sideral-footer-title::before { content: ''; width: 24px; height: 2px; background: #55c7ce; border-radius: 2px; display: inline-block; }
+  .sideral-footer-links, .sideral-see-also-links { display: flex; flex-wrap: wrap; gap: 8px; }
+  .sideral-footer-links a, .sideral-see-also-links a { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 8px 14px; border-radius: 10px; text-decoration: none; font-size: 0.85rem; font-weight: 600; line-height: 1.2; transition: all 0.25s cubic-bezier(0.25, 1, 0.5, 1); }
+  .sideral-footer-links a { color: #e5e7eb; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.35); }
+  .sideral-footer-links a i { font-size: 1rem; color: #ffffff; }
+  .sideral-footer-links a:hover, .sideral-see-also-links a:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); }
+  .sideral-footer-links a:hover { color: #000000; background: #ffffff; border-color: #000000; }
+  .sideral-footer-links a:hover i { color: #000000; }
+  .sideral-copyright { margin: 20px 0 0; padding-top: 16px; border-top: 1px solid rgba(148, 163, 184, 0.15); color: #94a3b8; font-size: 0.82rem; text-align: center; letter-spacing: 0.02em; }
+  .sideral-copyright strong { color: #55c7ce; font-weight: 700; }
+  .sideral-see-also { margin-top: 28px; padding: 20px; border: 1px solid #dbeafe; border-radius: 10px; background: #eff6ff; }
+  .sideral-see-also h2 { margin: 0 0 12px; color: #1e3a8a; font-size: 1.2rem; line-height: 1.25; }
+  .sideral-see-also-links a { color: #1d4ed8; background: #ffffff; border: 1px solid #bfdbfe; }
+  .sideral-see-also-links a:hover { color: #1e40af; background: #dbeafe; }
+  @media (max-width: 640px) { .sideral-footer-inner { padding: 24px 16px 16px; } .sideral-footer-links, .sideral-see-also-links { display: grid; grid-template-columns: 1fr; gap: 8px; } .sideral-footer-links a, .sideral-see-also-links a { width: 100%; justify-content: center; text-align: center; } }
+
+        /* Footer final appearance (merged from duplicate override block) */
+.sideral-site-footer { background: #fff !important; color: #000 !important; border-top: 1px solid #000 !important; }
+  .sideral-site-footer::before, .sideral-site-footer::after { display: none !important; }
+  .sideral-footer-title { color: #000 !important; }
+  .sideral-footer-title::before { background: #000 !important; }
+  .sideral-footer-links a, .sideral-see-also-links a { color: #000 !important; background: #fff !important; border: 1px solid #000 !important; }
+  .sideral-footer-links a i, .sideral-see-also-links a i { color: #000 !important; }
+  .sideral-footer-links a:hover, .sideral-see-also-links a:hover { color: #fff !important; background: #000 !important; border-color: #000 !important; box-shadow: 0 4px 10px rgba(0,0,0,.2) !important; }
+  .sideral-footer-links a:hover i, .sideral-see-also-links a:hover i { color: #fff !important; }
+  .sideral-copyright { color: #000 !important; border-top: 1px solid #000 !important; }
+  .sideral-copyright strong { color: #000 !important; }
+
+
+        /* Overrides de footer consolidados */
+.sideral-site-footer { background: #fff !important; color: #000 !important; border-top: 1px solid #000 !important; }
+  .sideral-site-footer::before, .sideral-site-footer::after { display: none !important; }
+  .sideral-footer-title { color: #000 !important; }
+  .sideral-footer-title::before { background: #000 !important; }
+  .sideral-footer-links a, .sideral-see-also-links a { color: #000 !important; background: #fff !important; border: 1px solid #000 !important; }
+  .sideral-footer-links a i, .sideral-see-also-links a i { color: #000 !important; }
+  .sideral-footer-links a:hover, .sideral-see-also-links a:hover { color: #fff !important; background: #000 !important; border-color: #000 !important; box-shadow: 0 4px 10px rgba(0,0,0,.2) !important; }
+  .sideral-footer-links a:hover i, .sideral-see-also-links a:hover i { color: #fff !important; }
+  .sideral-copyright { color: #000 !important; border-top: 1px solid #000 !important; }
+  .sideral-copyright strong { color: #000 !important; }
+    </style>
+
+  <link rel="stylesheet" href="site-shell.css?v=20260822-sidebar-icons1">
+  
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="shortcut icon" href="/favicon.png" type="image/png">
+    <link rel="apple-touch-icon" href="/favicon.png">
+
+<style id="metbrReferenceInterfaceStyles">
+
+    :root{color-scheme:dark;--bg:#171a20;--panel:#22262e;--panel2:#2b3039;--border:rgba(255,255,255,.09);--text:#edf1f7;--muted:#9ba7b7;--red:#ed3448}
+    *{box-sizing:border-box}[hidden]{display:none!important}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--text);font-family:"DM Sans",Arial,sans-serif}button,select,input{font:inherit}button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+    .site-header{height:78px;padding:0;top:auto;left:auto;width:100%;background:#20242c;border-bottom:1px solid var(--border);position:relative;z-index:10}.header-inner{height:100%;width:min(100% - 48px,1480px);margin:auto;display:flex;align-items:center;gap:28px}.brand{display:flex;align-items:center;flex:0 0 auto}.brand img{display:block;width:150px;height:auto;max-height:54px;object-fit:contain}.header-nav{display:flex;align-items:center;gap:clamp(16px,2.5vw,38px);flex:1;justify-content:center}.header-nav a{color:#e8edf5;text-decoration:none;font-size:13px;font-weight:650}.header-nav a:hover{color:#ff7a87}.header-actions{display:flex;gap:8px}.head-button{padding:9px 13px;border:1px solid var(--border);border-radius:5px;color:#edf1f7;text-decoration:none;background:transparent;font-size:11px;font-weight:700}.head-button:hover{background:#343b47}
+    .app{height:calc(100vh - 78px);display:flex;flex-direction:column;min-height:500px}.metbr-toolbar{height:49px;flex:0 0 auto;display:grid;grid-template-columns:300px minmax(0,1fr) auto;align-items:stretch;background:#262b34;border-bottom:1px solid #11151b}.metbr-tool-group{display:flex;gap:7px;align-items:center;min-width:0;padding:6px 10px}.metbr-tool-group+.metbr-tool-group{border-left:1px solid var(--border)}.icon-btn{display:inline-grid;place-items:center;width:32px;height:32px;border:1px solid transparent;border-radius:5px;background:transparent;color:#d1d9e4;flex:0 0 auto}.icon-btn:hover,.icon-btn[aria-pressed="true"]{background:rgba(237,52,72,.14);border-color:rgba(237,52,72,.35);color:#fff}.icon-btn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.timeline{gap:12px}.timeline input{width:100%;min-width:50px;accent-color:var(--red)}.readout{white-space:nowrap;min-width:54px;text-align:right;font-weight:800;font-size:12px}.model-cycle{font-size:10px;color:#aeb9c8;white-space:nowrap}.speed{width:75px;accent-color:var(--red)}
+    .metbr-layout{display:grid;grid-template-columns:300px minmax(0,1fr);flex:1;min-height:0}.metbr-sidebar{min-width:0;overflow:auto;background:var(--panel);border-right:1px solid rgba(0,0,0,.25)}.side-head{padding:17px 18px 15px;background:var(--panel2);border-bottom:1px solid var(--border)}.side-head h1{margin:0;font-size:16px;line-height:1.3;font-weight:800;letter-spacing:-.02em}.cycle-line{margin-top:7px;color:#9ba7b7;font-size:11px}.side-section{padding:15px 13px;border-bottom:1px solid var(--border)}.side-label{display:flex;justify-content:space-between;margin:0 5px 10px;color:#9ba6b6;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.field-label{display:block;color:#cbd3df;font-size:11px;font-weight:700;margin:11px 4px 6px}.select{width:100%;min-height:37px;background:#191d24;color:#edf1f7;border:1px solid rgba(255,255,255,.13);border-radius:5px;padding:7px 9px;font-size:12px;outline:none}.select:focus{border-color:rgba(237,52,72,.65)}.help-line{font-size:10px;color:#8f9bab;line-height:1.45;margin:10px 4px 0}
+    .map-panel{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;background:#171b21}.map-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1px;flex:1;min-height:0;background:#101318}.map-card{display:flex;flex-direction:column;min-width:0;min-height:0;background:#fff;color:#20242a}.map-card-head{height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;background:#22262e;color:#edf1f7;border-bottom:1px solid #11151b}.map-card-head strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.map-actions{display:flex;gap:4px;flex:0 0 auto}.map-export-row{flex:0 0 auto;display:flex;justify-content:flex-end;align-items:center;min-height:31px;padding:3px 8px;background:#191d24;border-bottom:1px solid #11151b}.map-export-row .map-actions{justify-content:flex-end;flex-wrap:wrap}.map-actions button{border:1px solid rgba(255,255,255,.12);background:#2b3039;color:#dbe2eb;border-radius:4px;font-size:9px;padding:5px 6px;white-space:nowrap}.map-actions button:hover{background:rgba(237,52,72,.2)}.map-actions button:disabled{opacity:.45;cursor:wait}.image-wrap{position:relative;display:flex;align-items:center;justify-content:center;flex:1;min-height:0;background:#fff;overflow:hidden}.bulletin{display:block;width:100%;height:100%;object-fit:contain;background:#fff}.bulletin.alternate{position:absolute;inset:0}.image-state{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#fff;color:#727b86;font-size:12px}.image-state[hidden]{display:none}.status-bar{height:25px;flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 12px;background:#20242c;border-top:1px solid var(--border);color:#aeb9c8;font-size:10px}.status-bar span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .metbr-layout.sidebar-collapsed{grid-template-columns:minmax(0,1fr)}.metbr-layout.sidebar-collapsed .metbr-sidebar{display:none}.metbr-mobile-side{display:none}
+    @media(max-width:1000px){.metbr-toolbar{grid-template-columns:230px minmax(0,1fr) auto}.metbr-layout{grid-template-columns:230px minmax(0,1fr)}.header-inner{gap:15px}.header-nav{gap:14px}.header-nav a{font-size:11px}.brand img{width:128px}.speed{width:48px}}
+    @media(max-width:720px){.site-header{height:66px}.header-inner{width:calc(100% - 24px);gap:8px}.brand img{width:112px}.header-nav{display:none}.header-actions{margin-left:auto}.app{height:calc(100vh - 66px)}.metbr-toolbar{height:44px;grid-template-columns:auto minmax(0,1fr) auto}.metbr-tool-group{padding:4px;gap:3px}.metbr-tool-group .optional{display:none}.icon-btn{width:28px;height:29px}.timeline{gap:5px}.readout{min-width:42px;font-size:10px}.speed{display:none}.model-cycle{display:none}.metbr-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}.metbr-sidebar{display:none;max-height:42vh;border-right:0;border-bottom:1px solid var(--border)}.metbr-sidebar.is-open{display:block}.side-head{padding:12px 14px}.side-section{padding:10px 11px}.map-pair{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,1fr);overflow:auto}.map-card-head{height:31px;padding:5px 8px}.map-card-head strong{font-size:10px}.map-export-row{min-height:29px;padding:3px 6px}.map-actions button{font-size:9px;padding:4px 6px}.status-bar{height:22px;font-size:9px}.status-right{display:none}}
+  
+    /* A interface METBR mantém o layout de dois produtos; o motor refletividaded
+       fica fora da tela, mas com dimensões reais para o Leaflet e o renderizador. */
+    #metbrUI .image-wrap{overflow:auto;align-items:flex-start}
+    #metbrUI .image-wrap canvas{display:block;width:100%;height:auto;min-width:100%;max-width:none;max-height:none;flex:0 0 auto;object-fit:contain;background:#fff}
+    #metbrUI .image-state {z-index:2;padding:18px;text-align:center;line-height:1.5}
+    #metbrUI .map-actions button {min-width:41px}
+    #metbrUI .map-actions button:disabled {opacity:.45;cursor:wait}
+    #engineShell {position:absolute!important;left:-20000px!important;top:0!important;width:1000px!important;height:700px!important;overflow:hidden!important;pointer-events:none!important;z-index:-1!important;opacity:.001!important}
+    #engineShell .sidebar {position:absolute!important;left:0!important;top:0!important;width:1px!important;height:1px!important;overflow:hidden!important}
+    #engineShell .control-panel {position:absolute!important;left:0!important;top:0!important;width:1px!important;height:1px!important;max-width:none!important;overflow:hidden!important;margin:0!important;padding:0!important;border:0!important}
+    #engineShell .main-content {position:absolute!important;left:0!important;top:0!important;width:1000px!important;height:700px!important;margin:0!important;overflow:hidden!important}
+    #engineShell .main-content > header {position:absolute!important;left:0!important;top:0!important;width:1000px!important;height:1px!important;min-height:1px!important;padding:0!important;border:0!important;overflow:hidden!important}
+    #engineShell .map-container {position:absolute!important;left:0!important;top:0!important;width:1000px!important;height:700px!important;padding:0!important;margin:0!important;flex:none!important}
+    #engineShell #map {position:absolute!important;inset:0!important;width:1000px!important;height:700px!important;min-height:700px!important}
+    #engineShell #wrfNotice, #engineShell #wrfTutorial, #engineShell .sideral-site-footer, #engineShell #exportModal {display:none!important}
+    #engineShell .sideral-see-also {display:none!important}
+    @media(max-width:720px){#metbrUI .metbr-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}#metbrUI .metbr-sidebar{display:none;max-height:42vh;border-right:0;border-bottom:1px solid var(--border)}#metbrUI .metbr-sidebar.is-open{display:block}}
+
+
+    #metbrUI{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;z-index:1000;background:var(--bg)}
+    #metbrUI .site-header{position:relative!important;top:auto!important;left:auto!important;height:78px;min-height:78px;flex:0 0 78px;width:100%;z-index:20}
+    #metbrUI .app{height:auto;min-height:0;flex:1;overflow:hidden}
+    #metbrUI .metbr-layout{min-height:0}
+    #metbrUI .map-pair{min-height:0}
+    #engineShell{position:fixed!important;left:-12000px!important;top:0!important;width:1000px!important;height:700px!important;overflow:hidden!important;pointer-events:none!important;z-index:-1!important;opacity:.001!important}
+    @media(max-width:720px){#metbrUI .site-header{height:66px;min-height:66px;flex-basis:66px}}
+
+    /* O boletim METBR usa um único mapa em tela cheia. A segunda variável
+       continuava sendo renderizada em paralelo e deixava os produtos estreitos. */
+    #metbrUI .map-pair{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr)!important}
+    #metbrUI .map-card:nth-child(2),
+    #metbrUI #uiVariableB,
+    #metbrUI label[for="uiVariableB"]{display:none!important}
+    #metbrUI .map-card-head{display:none!important}
+    #metbrUI .map-export-row{border-top:0}
+    #metbrUI .header-nav:not(.metbr-nav){display:none!important}
+</style>
+<style>#metbrUI .product-media{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:2;background:#0d141e}#metbrUI .product-image{object-fit:contain}#metbrUI .product-frame{border:0}#metbrUI .image-wrap{position:relative}#metbrUI .image-state{z-index:5}#metbrUI input.select{width:100%;min-height:36px;padding:7px 9px;background:#171d26;color:#e4eaf1;border:1px solid #3a4350;border-radius:4px}</style>
+</head>
+<body>
+<div id="metbrUI">
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="index.html" aria-label="Sideral Meteorologia"><img src="https://raw.githubusercontent.com/progames12301-hash/sideral-backend/main/assets/sideral-logo.png" alt="Sideral Meteorologia"></a>
+      <nav class="header-nav"><a href="index.html">Início</a><a href="consulta/radar.html">Radar</a></nav>
+      <nav class="header-nav metbr-nav"><a href="index.html">Ferramentas</a><a href="index.html">Modelos</a><a href="index.html">Sobre</a><a href="index.html">A Sideral</a></nav>
+      <div class="header-actions"><a class="head-button" href="index.html">Voltar</a></div>
+    </div>
+  </header>
+  <main class="app">
+    <div class="metbr-toolbar" role="toolbar" aria-label="Controles SAMeT / CPTEC">
+      <div class="metbr-tool-group">
+        <button class="icon-btn" id="uiToggleSidebar" title="Mostrar/ocultar variáveis" aria-label="Mostrar/ocultar variáveis" aria-pressed="false"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1"></rect><path d="M9 4v16"></path></svg></button>
+        <button class="icon-btn" id="uiPlay" title="Animar previsão" aria-label="Animar previsão" aria-pressed="false"><svg id="uiPlayIcon" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z" fill="currentColor" stroke="none"></path></svg></button>
+        <input class="speed optional" id="uiSpeed" type="range" min="1" max="10" value="8" aria-label="Velocidade da animação" title="Velocidade">
+      </div>
+      <div class="metbr-tool-group timeline">
+        <button class="icon-btn optional" id="uiPrev" title="Horário anterior" aria-label="Horário anterior"><svg viewBox="0 0 24 24"><path d="M18 5 8 12l10 7z" fill="currentColor" stroke="none"></path><path d="M5 5v14"></path></svg></button>
+        <input id="uiFrameSlider" type="range" min="0" max="0" value="0" step="1" aria-label="Horário de previsão" disabled>
+        <span class="readout" id="uiFrameReadout">F000</span>
+        <button class="icon-btn optional" id="uiNext" title="Próximo horário" aria-label="Próximo horário" disabled><svg viewBox="0 0 24 24"><path d="m6 5 10 7-10 7z" fill="currentColor" stroke="none"></path><path d="M19 5v14"></path></svg></button>
+      </div>
+      <div class="metbr-tool-group"><button class="icon-btn" id="uiFullscreen" title="Tela cheia" aria-label="Tela cheia"><svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"></path></svg></button></div>
+    </div>
+    <div class="metbr-layout" id="uiLayout">
+      <aside class="metbr-sidebar" id="uiSidebar">
+        <div class="side-head"><h1 id="uiModelTitle">SAMeT / CPTEC</h1><div class="cycle-line" id="uiCycleLine">CPTEC / INPE · SAMeT · 0,05° · 2000–atual</div></div>
+        <section class="side-section model-variant-section"><label class="field-label" for="uiModelVariant">Tipo de dado</label><select class="select" id="uiModelVariant" aria-label="Tipo de dado"><option value="estimated" selected>Estimativa SAMeT</option><option value="observed">Observações</option></select></section>
+        <section class="side-section"><h2 class="side-label">Produto e visualização</h2><label class="field-label" for="uiVariableA">Mapa 1 · variável</label><select class="select" id="uiVariableA"><option value="TMAX" selected>Temperatura máxima (TMAX)</option><option value="TMIN">Temperatura mínima (TMIN)</option></select><label class="field-label" for="uiVariableB">Mapa 2 · variável</label><select class="select" id="uiVariableB"><option value="TMIN" selected>Temperatura mínima (TMIN)</option><option value="TMAX">Temperatura máxima (TMAX)</option></select><label class="field-label" for="uiDate">Data de referência</label><input class="select" id="uiDate" type="date" min="2000-01-01" value="2026-10-21"><label class="field-label">Disponibilidade</label><label class="help-line" style="display:flex;align-items:center;gap:8px"><input id="uiFallback" type="checkbox" checked style="width:auto"> Buscar mapa disponível anterior se faltar a data</label><p class="help-line">Mostra a imagem publicada pelo CPTEC/INPE sem reconstruir ou reamostrar a grade original.</p><label class="field-label" for="uiExportSpeed">Velocidade da animação</label><select class="select" id="uiExportSpeed"><option value="slow">Lenta</option><option value="normal">Normal</option><option value="fast">Rápida</option><option value="veryFast">Muito rápida</option><option value="ultraFast" selected>Ultra-rápida</option></select><p class="help-line" id="uiErrorMessage" role="status" aria-live="polite"></p></section>
+      </aside>
+      <section class="map-panel" aria-label="Visualizações SAMeT / CPTEC">
+        <div class="map-pair">
+          <article class="map-card">
+            <header class="map-card-head"><strong id="uiTitleA">Temperatura máxima (TMAX)</strong></header>
+            <div class="map-export-row" aria-label="Exportação do mapa 1"><div class="map-actions"><button type="button" id="uiDownloadA">PNG 4K</button><button type="button" id="uiDownloadGifA">GIF</button><button type="button" id="uiDownloadMp4A">MP4</button></div></div>
+            <div class="image-wrap"><canvas class="bulletin" id="uiCanvasA" aria-label="Visualização SAMeT / CPTEC, mapa 1"></canvas><div class="image-state" id="uiStateA">Aguardando dados da fonte…</div></div>
+          </article>
+          <article class="map-card">
+            <header class="map-card-head"><strong id="uiTitleB">Temperatura mínima (TMIN)</strong></header>
+            <div class="map-export-row" aria-label="Exportação do mapa 2"><div class="map-actions"><button type="button" id="uiDownloadB">PNG 4K</button><button type="button" id="uiDownloadGifB">GIF</button><button type="button" id="uiDownloadMp4B">MP4</button></div></div>
+            <div class="image-wrap"><canvas class="bulletin" id="uiCanvasB" aria-label="Visualização SAMeT / CPTEC, mapa 2"></canvas><div class="image-state" id="uiStateB">Aguardando dados da fonte…</div></div>
+          </article>
+        </div>
+        <footer class="status-bar"><span id="uiValidTime">—</span><span class="status-right" id="uiFrameStatus">Aguardando SAMeT / CPTEC</span></footer>
+      </section>
+    </div>
+  </main>
+</div>
+
+
+<script>window.SIDERAL_PRODUCT={"type":"samet","title":"SAMeT / CPTEC","sourceLine":"CPTEC / INPE · SAMeT · 0,05° · 2000–atual","initialA":"Temperatura máxima (TMAX)","initialB":"Temperatura mínima (TMIN)"};</script>
+<script>
+(function(){
+'use strict';const P=window.SIDERAL_PRODUCT,$=id=>document.getElementById(id);
+const S={series:null,rawLabels:[],displayLabels:[],activeIndex:0,timelineMode:'none',anchorDate:null,timer:null,urls:{A:null,B:null},activeRequest:0};
+const cv=s=>$('uiCanvas'+s),title=s=>$('uiTitle'+s),st=s=>$('uiState'+s);
+const today=()=>new Date().toISOString().slice(0,10);
+const shiftDay=(date,n)=>{const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)};
+const shiftMonth=(ym,n)=>{const [y,m]=ym.split('-').map(Number);return new Date(Date.UTC(y,m-1+n,1)).toISOString().slice(0,7)};
+const dateLabel=v=>{if(!v)return'—';const d=new Date((v.length===7?v+'-01':v)+'T12:00:00Z');return Number.isNaN(d.getTime())?v:d.toLocaleDateString('pt-BR',{timeZone:'UTC'})};
+function status(msg,error=false){$('uiFrameStatus').textContent=msg;$('uiErrorMessage').textContent=error?msg:'';$('uiErrorMessage').style.color=error?'#fca5a5':'';$('uiCycleLine').textContent=P.sourceLine}
+function clearMedia(s){const c=cv(s),w=c.parentElement;w.querySelectorAll('.product-media').forEach(n=>n.remove());c.style.display='none'}
+function showState(s,msg,error=false){clearMedia(s);st(s).textContent=msg;st(s).style.display='flex';st(s).style.color=error?'#fca5a5':'';st(s).style.borderColor=error?'#7f1d1d':''}
+function hideState(s){st(s).style.display='none'}
+function mediaNode(s,tag,cl){clearMedia(s);const el=document.createElement(tag);el.className='product-media '+cl;cv(s).parentElement.appendChild(el);return el}
+function showImage(s,url,alt){const im=mediaNode(s,'img','product-image');im.alt=alt||P.title;im.onload=()=>hideState(s);im.onerror=()=>showState(s,'A imagem não carregou. Verifique a disponibilidade da fonte oficial.',true);im.src=url;S.urls[s]=url}
+function showFrame(s,url,label){const f=mediaNode(s,'iframe','product-frame');f.title=label||P.title;f.loading='eager';f.referrerPolicy='strict-origin-when-cross-origin';f.onload=()=>hideState(s);f.src=url;S.urls[s]=url}
+function chart(s,labels,values,unit,heading,color){const c=cv(s),w=c.parentElement;w.querySelectorAll('.product-media').forEach(n=>n.remove());c.style.display='block';c.width=1400;c.height=760;const x=c.getContext('2d'),W=c.width,H=c.height;x.clearRect(0,0,W,H);x.fillStyle='#0e1723';x.fillRect(0,0,W,H);const valid=values.map((v,i)=>({v:Number(v),i})).filter(a=>Number.isFinite(a.v));title(s).textContent=heading;if(!valid.length){x.fillStyle='#a7b3c3';x.font='24px Arial';x.fillText('Sem valores disponíveis para esta variável.',42,66);hideState(s);return}const min=Math.min(...valid.map(a=>a.v)),max=Math.max(...valid.map(a=>a.v)),range=max-min||1,p={l:86,r:36,t:74,b:76},cw=W-p.l-p.r,ch=H-p.t-p.b;x.fillStyle='#eef2f7';x.font='16px Arial';x.fillText(heading,p.l,34);x.fillStyle='#9aa9bc';x.font='13px Arial';x.fillText(unit,p.l,55);x.strokeStyle='#273445';x.lineWidth=1;x.fillStyle='#a8b5c6';for(let i=0;i<5;i++){const y=p.t+ch*i/4;x.beginPath();x.moveTo(p.l,y);x.lineTo(W-p.r,y);x.stroke();x.fillText((max-range*i/4).toLocaleString('pt-BR',{maximumFractionDigits:1}),8,y+5)}x.strokeStyle=color;x.lineWidth=3;x.beginPath();valid.forEach((a,j)=>{const xx=p.l+(labels.length===1?cw/2:cw*a.i/Math.max(1,labels.length-1)),yy=p.t+ch-(a.v-min)/range*ch;j===0?x.moveTo(xx,yy):x.lineTo(xx,yy)});x.stroke();valid.forEach(a=>{const xx=p.l+(labels.length===1?cw/2:cw*a.i/Math.max(1,labels.length-1)),yy=p.t+ch-(a.v-min)/range*ch;x.fillStyle=color;x.beginPath();x.arc(xx,yy,4,0,Math.PI*2);x.fill()});if(labels[S.activeIndex]!==undefined&&labels.length){const i=Math.min(labels.length-1,Math.max(0,S.activeIndex)),xx=p.l+(labels.length===1?cw/2:cw*i/Math.max(1,labels.length-1)),v=Number(values[i]);x.strokeStyle='#f1c76a';x.lineWidth=2;x.setLineDash([6,5]);x.beginPath();x.moveTo(xx,p.t);x.lineTo(xx,p.t+ch);x.stroke();x.setLineDash([]);if(Number.isFinite(v)){x.fillStyle='#f1c76a';x.beginPath();x.arc(xx,p.t+ch-(v-min)/range*ch,6,0,Math.PI*2);x.fill()}}x.fillStyle='#9aa9bc';x.font='13px Arial';[...new Set([0,Math.floor((labels.length-1)/3),Math.floor(2*(labels.length-1)/3),labels.length-1])].forEach(i=>{if(!labels[i])return;const xx=p.l+cw*i/Math.max(1,labels.length-1);x.fillText(String(labels[i]).slice(0,10),Math.max(p.l,xx-28),H-34)});hideState(s)}
+function cardStatus(m){$('uiValidTime').textContent=m}
+function buttonState(max,val){const sl=$('uiFrameSlider');$('uiPrev').disabled=sl.disabled||val<=0;$('uiNext').disabled=sl.disabled||val>=max}
+function setTimeline(max,val,mode){S.timelineMode=mode;const sl=$('uiFrameSlider');sl.min='0';sl.max=String(Math.max(0,max));sl.value=String(Math.max(0,Math.min(max,val)));sl.disabled=max<=0||mode==='none';buttonState(max,Number(sl.value));$('uiFrameReadout').textContent=mode==='date'?dateLabel(S.anchorDate):mode==='month'?(S.anchorDate||'—'):mode==='series'?(S.displayLabels[S.activeIndex]||'—'):'—'}
+function dateTimeline(d,max=14){S.anchorDate=d;setTimeline(max,max,'date');$('uiFrameReadout').textContent=dateLabel(d)}
+function monthTimeline(d,max=12){S.anchorDate=d;setTimeline(max,max,'month');$('uiFrameReadout').textContent=d}
+function staticTimeline(){S.timelineMode='none';$('uiFrameSlider').disabled=true;$('uiPrev').disabled=true;$('uiNext').disabled=true;$('uiFrameReadout').textContent='—';stopPlayback()}
+function updateTimeline(v){const sl=$('uiFrameSlider'),max=Number(sl.max)||0;sl.value=String(Math.max(0,Math.min(max,v)));buttonState(max,Number(sl.value));if(S.timelineMode==='date'){const d=shiftDay(S.anchorDate,Number(sl.value)-max);$('uiDate').value=d;$('uiFrameReadout').textContent=dateLabel(d);void renderProduct()}else if(S.timelineMode==='month'){const d=shiftMonth(S.anchorDate,Number(sl.value)-max);$('uiDate').value=d;$('uiFrameReadout').textContent=d;void renderProduct()}else if(S.timelineMode==='series'){S.activeIndex=Number(sl.value)||0;redrawSeries()}}
+function imageExists(url){return new Promise(resolve=>{const im=new Image();let done=false;const finish=v=>{if(done)return;done=true;clearTimeout(timer);resolve(v)};const timer=setTimeout(()=>finish(false),9000);im.onload=()=>finish(true);im.onerror=()=>finish(false);im.src=url+(url.includes('?')?'&':'?')+'v='+Date.now()})}
+async function findImage(build,date,fallback,days=15){for(let i=0;i<(fallback?days:1);i++){const d=shiftDay(date,-i),url=build(d);if(await imageExists(url))return{date:d,url}}return null}
+function sametUrl(k,mode,d){const y=d.slice(0,4),m=d.slice(5,7),day=d.replaceAll('-','');if(mode==='estimated')return 'https://s3.cptec.inpe.br/ioper/tempo/SAMeT/FIG/DAILY/'+k+'/'+y+'/'+m+'/SAMeT_'+k+'_'+day+'.png';return 'https://ftp.cptec.inpe.br/modelos/tempo/SAMeT/FIG/DAILY/'+k+'/'+y+'/'+m+'/'+k+'_OBS_'+day+'.png'}
+async function sametSide(s,k,mode,date,fb){const heading=(k==='TMAX'?'Temperatura máxima':'Temperatura mínima')+(mode==='estimated'?' · estimada':' · observada');title(s).textContent=heading;showState(s,'Consultando imagem oficial SAMeT/CPTEC…');const got=await findImage(d=>sametUrl(k,mode,d),date,fb,15);if(!got){showState(s,'Não foi encontrada imagem para a data solicitada. Confira o catálogo oficial.',true);return null}showImage(s,got.url,heading);return got}
+async function renderSamet(){const req=++S.activeRequest,date=$('uiDate').value||today(),mode=$('uiModelVariant').value,fb=$('uiFallback').checked;status('Consultando mapas publicados pelo CPTEC/INPE…');const [a,b]=await Promise.all([sametSide('A',$('uiVariableA').value,mode,date,fb),sametSide('B',$('uiVariableB').value,mode,date,fb)]);if(req!==S.activeRequest)return;const used=a?.date||b?.date;if(used){$('uiDate').value=used;S.anchorDate=used}cardStatus('SAMeT · '+[a?.date,b?.date].filter(Boolean).join(' / '));$('uiFrameStatus').textContent=(a||b)?'Imagens oficiais encontradas · CPTEC/INPE':'Nenhuma imagem encontrada para a seleção';if(!a&&!b)status('Nenhuma imagem SAMeT encontrada para a seleção.',true)}
+function mergeUrl(kind,d){if(kind==='acc7')return 'https://ftp.cptec.inpe.br/modelos/tempo/MERGE/FIG/CLIMATOLOGY/ACCUMULATED/ACCUMULATED_7_dia.png';if(kind==='acc15')return 'https://ftp.cptec.inpe.br/modelos/tempo/MERGE/FIG/CLIMATOLOGY/ACCUMULATED/ACCUMULATED_15_dia.png';const y=d.slice(0,4),m=d.slice(5,7),day=d.replaceAll('-','');return 'https://ftp.cptec.inpe.br/modelos/tempo/MERGE/FIG/DAILY/'+y+'/'+m+'/MERGE_DAILY_'+day+'.png'}
+async function mergeSide(s,k,d,fb){const heading=k==='daily'?'Precipitação diária':k==='acc7'?'Acumulado em 7 dias':'Acumulado em 15 dias';title(s).textContent=heading;showState(s,'Consultando imagem oficial MERGE/CPTEC…');const url=mergeUrl(k,d),got=k==='daily'?await findImage(x=>mergeUrl(k,x),d,fb,15):(await imageExists(url)?{date:d,url}:null);if(!got){showState(s,'Arquivo não localizado na fonte CPTEC.',true);return null}showImage(s,got.url,heading);return got}
+async function renderMerge(){const req=++S.activeRequest,d=$('uiDate').value||today(),fb=$('uiFallback').checked;status('Consultando mapas publicados pelo MERGE/CPTEC…');const [a,b]=await Promise.all([mergeSide('A',$('uiVariableA').value,d,fb),mergeSide('B',$('uiVariableB').value,d,fb)]);if(req!==S.activeRequest)return;const used=a?.date||b?.date;if(used){$('uiDate').value=used;S.anchorDate=used}cardStatus('MERGE · '+(used||d)+' · CPTEC/INPE');$('uiFrameStatus').textContent='Precipitação diária e acumulados oficiais';if(!a&&!b)status('Nenhuma imagem MERGE encontrada para a seleção.',true)}
+const sources={jpl:{url:'https://grace.jpl.nasa.gov/data-analysis-tool/',label:'NASA/JPL · Data Analysis Tool'},unl:{url:'https://nasagrace.unl.edu/Slider.aspx',label:'GRACE · visualizador UNL'},data:{url:'https://grace.jpl.nasa.gov/data/get-data/',label:'Catálogo de dados GRACE/GRACE-FO'},mapa:{url:'https://monitordesecas.ana.gov.br/mapa',label:'Monitor de Secas · mapa oficial ANA'},sig:{url:'https://monitordesecas.ana.gov.br/dados-sig',label:'Monitor de Secas · Dados SIG ANA'}};
+function renderFramePair(){if(P.type==='seca')monthTimeline($('uiDate').value||new Date().toISOString().slice(0,7),12);else staticTimeline();const mon=$('uiDate')?.value;function sourceUrl(k){const src=sources[k];if(P.type==='seca'&&k==='mapa'&&mon){const [y,m]=mon.split('-');return src.url+'?ano='+encodeURIComponent(y)+'&mes='+Number(m)}return src.url}const a=$('uiVariableA').value,b=$('uiVariableB').value;title('A').textContent=sources[a].label;title('B').textContent=sources[b].label;showState('A','Carregando visualizador oficial…');showState('B','Carregando visualizador oficial…');showFrame('A',sourceUrl(a),sources[a].label);showFrame('B',sourceUrl(b),sources[b].label);$('uiDownloadA').textContent='Abrir fonte';$('uiDownloadB').textContent='Abrir fonte';cardStatus(P.type==='seca'?'Monitor de Secas · '+mon:'GRACE / GRACE-FO · fontes oficiais');$('uiFrameStatus').textContent='Se a fonte bloquear a incorporação, use “Abrir fonte”';status('Visualizadores oficiais solicitados; a incorporação depende das permissões do provedor.')}
+const fieldInfo={temperature_2m_mean:{label:'Temperatura média',unit:'°C'},precipitation_sum:{label:'Precipitação acumulada',unit:'mm'},wind_speed_10m_max:{label:'Vento máximo a 10 m',unit:'km/h'},relative_humidity_2m_mean:{label:'Umidade relativa',unit:'%'}};
+function groupSeries(labels,values,field,mode){if(mode==='daily')return{labels:labels.slice(),values:values.map(Number)};const groups=new Map();labels.forEach((d,i)=>{const dt=new Date(d+'T12:00:00Z');let k;if(mode==='weekly'){const stt=new Date(Date.UTC(dt.getUTCFullYear(),dt.getUTCMonth(),dt.getUTCDate()));stt.setUTCDate(stt.getUTCDate()-((stt.getUTCDay()+6)%7));k=stt.toISOString().slice(0,10)}else k=d.slice(0,7);if(!groups.has(k))groups.set(k,[]);const v=Number(values[i]);if(Number.isFinite(v))groups.get(k).push(v)});const ls=[],vs=[];for(const [k,a] of groups){ls.push(k);vs.push(field==='precipitation_sum'?a.reduce((x,y)=>x+y,0):field==='wind_speed_10m_max'?Math.max(...a):a.reduce((x,y)=>x+y,0)/a.length)}return{labels:ls,values:vs}}
+function redrawSeries(){if(!S.series)return;const mode=$('uiModelVariant').value,gs={};for(const s of ['A','B']){const f=$('uiVariable'+s).value;gs[s]=groupSeries(S.rawLabels,S.series[f]||[],f,mode);const heading=(fieldInfo[f]?.label||f)+(mode==='daily'?' · diário':mode==='weekly'?' · semanal':' · mensal');chart(s,gs[s].labels,gs[s].values,fieldInfo[f]?.unit||'',heading,s==='A'?'#ef6464':'#48a5ff')}S.displayLabels=gs.A.labels;S.activeIndex=Math.min(S.activeIndex,Math.max(0,S.displayLabels.length-1));const sl=$('uiFrameSlider');sl.min='0';sl.max=String(Math.max(0,S.displayLabels.length-1));sl.value=String(S.activeIndex);sl.disabled=S.displayLabels.length<=1;S.timelineMode='series';buttonState(Number(sl.max)||0,Number(sl.value)||0);$('uiFrameReadout').textContent=S.displayLabels[S.activeIndex]||'—';cardStatus('Validade selecionada · '+(S.displayLabels[S.activeIndex]||'—'))}
+async function loadArchive(){const req=++S.activeRequest,lat=Number($('uiLat').value),lon=Number($('uiLon').value),start=$('uiDateStart').value,end=$('uiDateEnd').value;if(!Number.isFinite(lat)||lat < -90||lat>90||lon < -180||lon>180)throw Error('Coordenadas inválidas.');if(!start||!end||start>end)throw Error('Selecione um período válido.');status('Consultando ERA5 histórico por coordenada…');showState('A','Consultando ERA5…');showState('B','Consultando ERA5…');const q=new URLSearchParams({latitude:String(lat),longitude:String(lon),start_date:start,end_date:end,daily:'temperature_2m_mean,precipitation_sum,wind_speed_10m_max,relative_humidity_2m_mean',models:'era5',timezone:'UTC'});const r=await fetch('https://archive-api.open-meteo.com/v1/archive?'+q),d=await r.json();if(!r.ok)throw Error(d.reason||('API histórica HTTP '+r.status));if(req!==S.activeRequest)return;const dy=d.daily||{};if(!Array.isArray(dy.time)||!dy.time.length)throw Error('A API não retornou dias para esse período.');S.series={};Object.keys(fieldInfo).forEach(k=>S.series[k]=dy[k]||[]);S.rawLabels=dy.time;S.activeIndex=S.rawLabels.length-1;redrawSeries();$('uiFrameStatus').textContent='ERA5 · '+lat.toFixed(2)+', '+lon.toFixed(2)+' · '+dy.time.length+' dias';status('ERA5 histórico consultado para '+lat.toFixed(2)+', '+lon.toFixed(2)+'.')}
+async function loadEps(seasonal){const req=++S.activeRequest,lat=Number($('uiLat').value),lon=Number($('uiLon').value);if(!Number.isFinite(lat)||lat < -90||lat>90||lon < -180||lon>180)throw Error('Coordenadas inválidas.');status(seasonal?'Consultando ECMWF SEAS5…':'Consultando ECMWF EC46…');showState('A','Consultando ensemble ECMWF…');showState('B','Consultando ensemble ECMWF…');const q=new URLSearchParams({latitude:String(lat),longitude:String(lon),daily:'temperature_2m_mean,precipitation_sum',forecast_days:seasonal?'217':'46',models:seasonal?'ecmwf_seas5_ensemble_mean':'ecmwf_ec46_ensemble_mean',timezone:'UTC'});const r=await fetch('https://seasonal-api.open-meteo.com/v1/seasonal?'+q),d=await r.json();if(!r.ok)throw Error(d.reason||('ECMWF API HTTP '+r.status));if(req!==S.activeRequest)return;const dy=d.daily||{};if(!Array.isArray(dy.time)||!dy.time.length)throw Error('O ensemble não retornou dados para o período.');S.series={temperature_2m_mean:dy.temperature_2m_mean||[],precipitation_sum:dy.precipitation_sum||[]};S.rawLabels=dy.time;S.activeIndex=S.rawLabels.length-1;redrawSeries();$('uiFrameStatus').textContent=(seasonal?'SEAS5':'EC46')+' · '+dy.time.length+' dias · '+lat.toFixed(2)+', '+lon.toFixed(2);status((seasonal?'ECMWF SEAS5':'ECMWF EC46')+' consultado para '+lat.toFixed(2)+', '+lon.toFixed(2)+'.')}
+async function renderProduct(){try{if(P.type==='samet')return await renderSamet();if(P.type==='merge')return await renderMerge();if(P.type==='seca'||P.type==='grace')return renderFramePair();if(P.type==='era5')return await loadArchive();if(P.type==='eps-weekly')return await loadEps(false);if(P.type==='eps-seasonal')return await loadEps(true)}catch(e){status(e.message||'Não foi possível carregar o produto.',true);showState('A',e.message||'Falha ao carregar.',true);showState('B',e.message||'Falha ao carregar.',true)}}
+function stopPlayback(){if(S.timer){clearInterval(S.timer);S.timer=null}$('uiPlay').setAttribute('aria-pressed','false');$('uiPlayIcon').innerHTML='<path d="m8 5 11 7-11 7z" fill="currentColor" stroke="none"></path>'}
+function moveTimeline(delta){const sl=$('uiFrameSlider');if(sl.disabled)return;updateTimeline((Number(sl.value)||0)+delta)}
+function togglePlayback(){if(S.timer){stopPlayback();return}if($('uiFrameSlider').disabled)return;$('uiPlay').setAttribute('aria-pressed','true');$('uiPlayIcon').innerHTML='<path d="M7 5h4v14H7zM14 5h4v14h-4z" fill="currentColor" stroke="none"></path>';S.timer=setInterval(()=>{const sl=$('uiFrameSlider'),max=Number(sl.max)||0;let n=(Number(sl.value)||0)+1;if(n>max)n=0;updateTimeline(n)},Math.max(350,1800-(Number($('uiSpeed').value||8)-1)*140))}
+function downloadSide(s){if(S.urls[s]){window.open(S.urls[s],'_blank','noopener');return}const c=cv(s);if(c.style.display==='none')return;c.toBlob(blob=>{if(!blob){status('Não foi possível exportar este gráfico.',true);return}const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=P.type+'-'+s.toLowerCase()+'.png';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),10000)},'image/png')}
+function prepareButtons(){for(const s of ['A','B']){$('uiDownload'+s).textContent=(P.type==='era5'||P.type.startsWith('eps-'))?'PNG':(P.type==='seca'||P.type==='grace')?'Abrir fonte':'Abrir imagem';$('uiDownload'+s).disabled=false;$('uiDownloadGif'+s).disabled=true;$('uiDownloadMp4'+s).disabled=true;$('uiDownloadGif'+s).title='GIF não está disponível neste produto.';$('uiDownloadMp4'+s).title='MP4 não está disponível neste produto.';$('uiDownloadGif'+s).style.opacity='.45';$('uiDownloadMp4'+s).style.opacity='.45'}}
+function defaults(){document.title=P.title+' | Sideral Meteorologia';$('uiModelTitle').textContent=P.title;$('uiCycleLine').textContent=P.sourceLine;$('uiTitleA').textContent=P.initialA||P.title;$('uiTitleB').textContent=P.initialB||P.title;
+ if($('uiDate')){if($('uiDate').type==='month'){const d=new Date();d.setUTCMonth(d.getUTCMonth()-1);$('uiDate').value=P.type==='seca'?d.toISOString().slice(0,7):today().slice(0,7)}else{$('uiDate').max=today();if(P.type==='samet')$('uiDate').value=shiftDay(today(),-3);if(P.type==='merge')$('uiDate').value=shiftDay(today(),-1)}}
+ if($('uiDateStart')){const end=shiftDay(today(),-5);$('uiDateEnd').max=end;$('uiDateEnd').value=end;$('uiDateStart').value=shiftDay(end,-14);$('uiDateStart').max=end}
+ if(P.type==='samet'||P.type==='merge')dateTimeline($('uiDate').value||today(),14);
+ if(P.type==='seca')monthTimeline($('uiDate').value||today().slice(0,7),12);
+ if(P.type==='grace')staticTimeline();
+ $('uiDate')?.addEventListener('change',()=>{if(P.type==='samet'||P.type==='merge')dateTimeline($('uiDate').value,14);if(P.type==='seca')monthTimeline($('uiDate').value,12);void renderProduct()});
+ $('uiFallback')?.addEventListener('change',()=>void renderProduct());
+ $('uiVariableA').addEventListener('change',()=>void renderProduct());$('uiVariableB').addEventListener('change',()=>void renderProduct());
+ $('uiModelVariant').addEventListener('change',()=>{if((P.type==='era5'||P.type.startsWith('eps-'))&&S.series)redrawSeries();else void renderProduct()});
+ $('uiApplyCoords')?.addEventListener('click',()=>void renderProduct());
+ $('uiFrameSlider').addEventListener('input',()=>updateTimeline(Number($('uiFrameSlider').value)));
+ $('uiPrev').addEventListener('click',()=>moveTimeline(-1));$('uiNext').addEventListener('click',()=>moveTimeline(1));$('uiPlay').addEventListener('click',togglePlayback);
+ $('uiToggleSidebar').addEventListener('click',()=>{if(window.matchMedia('(max-width:720px)').matches)$('uiSidebar').classList.toggle('is-open');else $('uiLayout').classList.toggle('sidebar-collapsed')});
+ $('uiFullscreen').addEventListener('click',async()=>{const el=$('metbrUI').querySelector('.map-pair');try{if(document.fullscreenElement)await document.exitFullscreen();else await el.requestFullscreen()}catch(_){}});
+ ['A','B'].forEach(s=>$('uiDownload'+s).addEventListener('click',()=>downloadSide(s)));
+ prepareButtons();if(P.type==='grace'){$('uiPlay').disabled=true;$('uiSpeed').disabled=true}
+}
+function start(){defaults();void renderProduct()}
+document.addEventListener('DOMContentLoaded',start,{once:true});
+})();</script>
+</body>
+</html>
