@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#171a20">
+<title>ICON | Sideral Meteorologia</title>
+<link rel="icon" type="image/png" href="./favicon.png">
+<style>
+:root{color-scheme:dark;--bg:#171a20;--panel:#22262e;--panel2:#2b3039;--line:rgba(255,255,255,.09);--text:#edf1f7;--muted:#9ba7b7;--red:#ed3448;--green:#50d3a3;--amber:#e8bd67}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter,"DM Sans",Arial,sans-serif}
+body{overflow:hidden}
+button,select,input{font:inherit}
+button{cursor:pointer}
+.site-header{height:68px;padding:0 24px;display:flex;align-items:center;gap:18px;background:#20242c;border-bottom:1px solid var(--line)}
+.brand-mark{width:36px;height:36px;display:grid;place-items:center;border:1px solid rgba(237,52,72,.7);color:#fff;font-size:12px;font-weight:900;letter-spacing:-.06em}
+.brand{min-width:0;display:flex;flex-direction:column;gap:4px}
+.brand strong{font-size:12px;letter-spacing:.13em;font-weight:850}
+.brand span{font-size:11px;color:var(--muted)}
+.header-model{margin-left:auto;text-align:right;min-width:0}
+.header-model strong{display:block;font-size:14px;font-weight:800;white-space:nowrap}
+.header-model span{display:block;margin-top:4px;font-size:11px;color:var(--muted)}
+.app{height:calc(100vh - 68px);display:flex;flex-direction:column;min-height:0}
+.toolbar{height:48px;flex:0 0 auto;display:grid;grid-template-columns:auto minmax(120px,1fr) auto;gap:10px;align-items:center;padding:6px 12px;background:#262b34;border-bottom:1px solid #11151b}
+.tool-group{display:flex;align-items:center;gap:6px}
+.tool-btn{height:32px;min-width:32px;padding:0 10px;border:1px solid var(--line);border-radius:4px;color:#d1d9e4;background:#1c2027;font-size:12px;font-weight:750}
+.tool-btn:hover:not(:disabled){border-color:rgba(237,52,72,.6);color:#fff;background:#343b47}
+.tool-btn:disabled{opacity:.4;cursor:not-allowed}
+.timeline{display:flex;align-items:center;gap:10px;min-width:0}
+.timeline input{width:100%;min-width:40px;accent-color:var(--red)}
+.readout{font-size:11px;font-weight:800;white-space:nowrap;min-width:94px;text-align:right}
+.top-status{font-size:10px;color:var(--muted);max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+.layout{flex:1;min-height:0;display:grid;grid-template-columns:305px minmax(0,1fr)}
+.sidebar{background:var(--panel);border-right:1px solid rgba(0,0,0,.3);overflow:auto;min-width:0}
+.side-head{padding:18px;background:var(--panel2);border-bottom:1px solid var(--line)}
+.eyebrow{font-size:9px;font-weight:850;letter-spacing:.13em;color:var(--muted);text-transform:uppercase}
+.side-head h1{margin:7px 0 0;font-size:19px;line-height:1.18;letter-spacing:-.03em}
+.model-meta{margin-top:8px;color:var(--muted);font-size:11px;line-height:1.5}
+.status-row{display:flex;align-items:center;gap:7px;margin-top:12px;font-size:10px;font-weight:800}
+.status-dot{width:7px;height:7px;flex:0 0 auto;border-radius:50%;background:#737b88}
+.status-dot.online{background:var(--green);box-shadow:0 0 0 3px rgba(80,211,163,.1)}
+.status-dot.delayed{background:var(--amber)}
+.status-dot.unavailable{background:var(--red)}
+.section{padding:15px 14px;border-bottom:1px solid var(--line)}
+.section-label{display:flex;justify-content:space-between;align-items:center;margin:0 3px 11px;font-size:9px;font-weight:850;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.field{display:block;margin-top:12px}
+.field:first-of-type{margin-top:0}
+.field>span{display:block;margin:0 3px 6px;color:#cbd3df;font-size:11px;font-weight:700}
+.select{width:100%;min-height:36px;padding:7px 9px;border:1px solid rgba(255,255,255,.13);border-radius:4px;background:#191d24;color:#edf1f7;font-size:12px;outline:none}
+.select:focus{border-color:rgba(237,52,72,.65)}
+.helper{margin:10px 3px 0;color:#8f9bab;font-size:10px;line-height:1.5}
+.button-wide{width:100%;min-height:36px;padding:8px 10px;border:1px solid var(--line);border-radius:4px;background:#191d24;color:var(--text);font-size:11px;font-weight:800}
+.button-wide.primary{background:var(--red);border-color:var(--red);color:#fff}
+.button-wide:hover:not(:disabled){filter:brightness(1.12)}
+.button-wide:disabled{opacity:.4;cursor:not-allowed}
+.message{font-size:11px;line-height:1.55;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}
+.message.error{color:#ff9ea7}
+.message.good{color:var(--green)}
+.map-shell{min-width:0;min-height:0;display:flex;flex-direction:column;background:#15181e}
+.map-head{height:43px;flex:0 0 auto;padding:0 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);background:#20242c}
+.map-head strong{font-size:11px;font-weight:850;letter-spacing:.04em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.map-head span{margin-left:auto;color:var(--muted);font-size:10px;white-space:nowrap}
+.map-stage{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;overflow:auto;padding:18px;background:#11141a}
+#forecastImage{display:none;max-width:100%;max-height:100%;object-fit:contain;box-shadow:0 12px 50px rgba(0,0,0,.25)}
+#forecastImage.zoomed{max-width:none;max-height:none;width:140%;height:auto}
+.loading{max-width:520px;padding:28px;text-align:center;color:var(--muted);font-size:12px;line-height:1.7}
+.loading strong{display:block;color:var(--text);font-size:14px;margin-bottom:6px}
+.map-footer{flex:0 0 auto;min-height:37px;display:flex;align-items:center;gap:14px;padding:7px 15px;border-top:1px solid var(--line);background:#20242c;color:var(--muted);font-size:10px}
+.map-footer span:last-child{margin-left:auto;text-align:right}
+#notice{color:var(--muted)}
+@media(max-width:800px){
+ body{overflow:auto}.site-header{padding:0 13px;height:60px}.header-model strong{font-size:11px}.brand strong{font-size:10px}.brand span{font-size:9px}
+ .app{height:auto;min-height:calc(100vh - 60px)}.toolbar{grid-template-columns:auto minmax(40px,1fr);height:auto;min-height:48px}.top-status{display:none}
+ .layout{display:flex;flex-direction:column;min-height:calc(100vh - 108px)}.sidebar{order:2;overflow:visible;border-right:0;border-top:1px solid var(--line)}.map-shell{order:1;min-height:55vh}.map-stage{min-height:42vh;padding:8px}#forecastImage{max-height:none;width:100%}#forecastImage.zoomed{width:150%}.map-head{padding:0 10px}.map-footer{flex-wrap:wrap}
+}
+</style>
+</head>
+<body>
+<header class="site-header">
+  <div class="brand-mark">SW</div>
+  <div class="brand"><strong>SIDERAL / MODELOS NUMÉRICOS</strong><span>Previsão global · visualizador operacional</span></div>
+  <div class="header-model"><strong>ICON</strong><span>DWD · 13 km</span></div>
+</header>
+<div class="app">
+  <div class="toolbar">
+    <div class="tool-group">
+      <button class="tool-btn" id="previousBtn" title="Quadro anterior" disabled>◀</button>
+      <button class="tool-btn" id="playBtn" title="Reproduzir previsão" disabled>▶</button>
+      <button class="tool-btn" id="nextBtn" title="Próximo quadro" disabled>▶|</button>
+    </div>
+    <div class="timeline"><input id="timeline" type="range" min="0" max="0" value="0" disabled><div class="readout" id="frameReadout">F---</div></div>
+    <div class="top-status" id="topStatus">Consultando dados publicados…</div>
+  </div>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="side-head">
+        <div class="eyebrow">Modelo numérico</div>
+        <h1>ICON</h1>
+        <div class="model-meta">DWD<br>13 km · produto independente</div>
+        <div class="status-row"><span class="status-dot" id="statusDot"></span><span id="statusLabel">Verificando publicação</span></div>
+      </div>
+      <section class="section">
+        <div class="section-label"><span>Rodada e produto</span><span id="productCount">—</span></div>
+        <label class="field"><span>Rodada disponível</span><select class="select" id="runSelect" disabled><option>Carregando…</option></select></label>
+        <label class="field"><span>Variável / produto</span><select class="select" id="productSelect" disabled><option>Buscando produtos…</option></select></label>
+        <label class="field"><span>Domínio</span><select class="select" id="regionSelect" disabled><option>Carregando…</option></select></label>
+        <label class="field"><span>Hora de previsão</span><select class="select" id="hourSelect" disabled><option>—</option></select></label>
+        <p class="helper" id="runInfo">O catálogo e a lista de produtos são obtidos do backend. Seleções sem dados publicados são informadas, sem preencher valores fictícios.</p>
+      </section>
+      <section class="section">
+        <div class="section-label"><span>Exibição</span></div>
+        <button class="button-wide" id="zoomBtn" type="button">Ampliar mapa</button>
+        <div style="height:7px"></div>
+        <button class="button-wide primary" id="downloadBtn" type="button" disabled>Baixar mapa PNG</button>
+      </section>
+      <section class="section">
+        <div class="section-label"><span>Estado da consulta</span></div>
+        <div class="message" id="statusMessage">Conectando ao serviço de modelos numéricos…</div>
+      </section>
+      <section class="section">
+        <div class="section-label"><span>Fonte dos dados</span></div>
+        <div class="message">Dados publicados pelo backend Sideral. O visualizador não gera nem preenche dados meteorológicos ausentes. A data de validade e a rodada são informadas pelos metadados da fonte.</div>
+      </section>
+    </aside>
+    <main class="map-shell">
+      <div class="map-head"><strong id="mapTitle">ICON · aguardando dados</strong><span id="validTime">—</span></div>
+      <div class="map-stage" id="mapStage">
+        <div class="loading" id="loading"><strong>Carregando modelo</strong>Consultando rodadas, produtos e horários publicados.</div>
+        <img id="forecastImage" alt="Mapa de previsão numérica">
+      </div>
+      <div class="map-footer"><span id="cycleLabel">Rodada: —</span><span id="productLabel">Produto: —</span><span id="notice">Aguardando primeira consulta</span></div>
+    </main>
+  </div>
+</div>
+<script>
+(() => {
+'use strict';
+const MODEL_ID = 'icon';
+const API_BASE = (window.SIDERAL_API_BASE || 'https://sideral-backend.onrender.com').replace(/\/$/, '');
+const $ = id => document.getElementById(id);
+const ui = {
+  run:$('runSelect'), product:$('productSelect'), region:$('regionSelect'), hour:$('hourSelect'),
+  timeline:$('timeline'), readout:$('frameReadout'), previous:$('previousBtn'), next:$('nextBtn'), play:$('playBtn'),
+  image:$('forecastImage'), loading:$('loading'), status:$('statusMessage'), topStatus:$('topStatus'),
+  statusDot:$('statusDot'), statusLabel:$('statusLabel'), mapTitle:$('mapTitle'), validTime:$('validTime'),
+  cycle:$('cycleLabel'), productLabel:$('productLabel'), notice:$('notice'), productCount:$('productCount'),
+  runInfo:$('runInfo'), download:$('downloadBtn'), zoom:$('zoomBtn')
+};
+let catalogModel = null, statusInfo = null, currentRun = '', products = [], selectedProduct = null;
+let forecastHours = [], frameIndex = 0, frameObjectUrl = '', playbackTimer = null, requestNumber = 0, zoomed = false;
+
+async function fetchJson(path, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs || 35000);
+  try {
+    const response = await fetch(API_BASE + path, {cache:'no-store', signal:controller.signal});
+    const contentType = response.headers.get('content-type') || '';
+    if (!response.ok) {
+      let detail = '';
+      try { const body = await response.json(); detail = body.error || body.message || ''; } catch (_) {}
+      throw new Error('HTTP ' + response.status + (detail ? ': ' + detail : ''));
+    }
+    if (!contentType.includes('json')) throw new Error('O backend não retornou JSON para ' + path);
+    return await response.json();
+  } finally { clearTimeout(timer); }
+}
+function setMessage(message, kind) {
+  ui.status.textContent = message || '';
+  ui.status.className = 'message' + (kind ? ' ' + kind : '');
+  ui.topStatus.textContent = message || '';
+}
+function setLoading(message) {
+  ui.loading.hidden = false;
+  ui.loading.innerHTML = '<strong>' + escapeHtml(message || 'Carregando') + '</strong>Consultando o backend de modelos numéricos.';
+  ui.loading.style.display = 'block';
+}
+function hideLoading() { ui.loading.style.display = 'none'; }
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function formatHour(fh) {
+  const value = Number(fh);
+  return Number.isFinite(value) ? 'F' + String(Math.round(value)).padStart(3,'0') : 'F---';
+}
+function formatDate(value, timeZone) {
+  const date = value ? new Date(value) : null;
+  if (!date || !Number.isFinite(date.getTime())) return '—';
+  return date.toLocaleString('pt-BR', {timeZone:timeZone || 'UTC',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
+}
+function addOption(select, value, label) {
+  const option = document.createElement('option');
+  option.value = String(value); option.textContent = String(label);
+  select.appendChild(option);
+}
+function setModelHealth(model) {
+  const status = String(model && model.status || 'unavailable').toLowerCase();
+  ui.statusDot.className = 'status-dot ' + (status === 'online' ? 'online' : status === 'delayed' ? 'delayed' : 'unavailable');
+  ui.statusLabel.textContent = status === 'online' ? 'Dados publicados' : status === 'delayed' ? 'Rodada atrasada' : status === 'processing' ? 'Processando' : 'Sem rodada disponível';
+}
+function query(params) { return '?' + new URLSearchParams(params).toString(); }
+function selectedHour() { return Number(forecastHours[frameIndex] == null ? 0 : forecastHours[frameIndex]); }
+function syncTimeline() {
+  const length = forecastHours.length;
+  ui.timeline.max = String(Math.max(0,length-1));
+  ui.timeline.value = String(Math.min(frameIndex,Math.max(0,length-1)));
+  ui.timeline.disabled = length < 2;
+  ui.previous.disabled = length < 2 || frameIndex <= 0;
+  ui.next.disabled = length < 2 || frameIndex >= length-1;
+  ui.play.disabled = length < 2;
+  ui.readout.textContent = formatHour(forecastHours[frameIndex]);
+  ui.hour.value = String(forecastHours[frameIndex] == null ? '' : forecastHours[frameIndex]);
+}
+async function loadCatalogAndRuns() {
+  setLoading('Verificando catálogo');
+  try {
+    const result = await fetchJson('/api/models',35000);
+    const model = (result.models || []).find(item => item.id === MODEL_ID);
+    if (!model) throw new Error('O modelo ' + MODEL_ID + ' não está no catálogo do backend.');
+    catalogModel = model;
+    setModelHealth(model);
+    ui.runInfo.textContent = 'Resolução: ' + (model.resolution || '—') + ' · provedor: ' + (model.source || '—');
+    const regions = result.regions || [];
+    ui.region.replaceChildren();
+    for (const region of regions) addOption(ui.region,region.id,region.label || region.id);
+    ui.region.value = regions.some(r => r.id === 'south_america') ? 'south_america' : (regions[0] ? regions[0].id : 'brazil');
+    ui.region.disabled = regions.length === 0;
+
+    const runData = await fetchJson('/api/models/runs' + query({model:MODEL_ID}),35000);
+    const runs = Array.isArray(runData.runs) ? runData.runs : [];
+    ui.run.replaceChildren();
+    if (!runs.length) {
+      addOption(ui.run,'','Nenhuma rodada publicada');
+      ui.run.disabled = true;
+      ui.product.replaceChildren(); addOption(ui.product,'','Sem produtos');
+      ui.product.disabled = true; ui.hour.disabled = true;
+      setMessage('Nenhuma rodada publicada para este modelo. A página não inventa disponibilidade.', 'error');
+      ui.mapTitle.textContent = (model.name || MODEL_ID) + ' · sem dados';
+      ui.loading.innerHTML = '<strong>Modelo indisponível</strong>Não há rodadas publicadas no catálogo atual.';
+      return;
+    }
+    for (const run of runs) addOption(ui.run,run,formatRun(run));
+    currentRun = runs[0]; ui.run.value = currentRun; ui.run.disabled = false;
+    await loadProducts();
+  } catch (error) {
+    setModelHealth({status:'unavailable'});
+    setMessage(error && error.message ? error.message : 'Falha ao consultar o catálogo.', 'error');
+    ui.loading.innerHTML = '<strong>Não foi possível carregar o modelo</strong>' + escapeHtml(error && error.message ? error.message : 'O serviço de dados não respondeu.');
+  }
+}
+function formatRun(run) {
+  const text = String(run || '');
+  if (!/^\d{10}$/.test(text)) return text || '—';
+  const iso = text.slice(0,4)+'-'+text.slice(4,6)+'-'+text.slice(6,8)+'T'+text.slice(8,10)+':00:00Z';
+  return formatDate(iso,'UTC') + ' UTC';
+}
+async function loadProducts() {
+  stopPlayback();
+  const myRequest = ++requestNumber;
+  currentRun = ui.run.value;
+  ui.product.disabled = true; ui.hour.disabled = true;
+  setLoading('Carregando produtos publicados');
+  try {
+    const result = await fetchJson('/api/models/products' + query({model:MODEL_ID,run:currentRun}),35000);
+    if (myRequest !== requestNumber) return;
+    products = Array.isArray(result.products) ? result.products : [];
+    ui.product.replaceChildren();
+    for (const product of products) {
+      const unit = product.unit ? ' (' + product.unit + ')' : '';
+      addOption(ui.product,product.id,(product.name || product.id) + unit);
+    }
+    ui.productCount.textContent = String(products.length) + ' produto(s)';
+    if (!products.length) {
+      addOption(ui.product,'','Nenhum produto publicado'); ui.product.disabled = true;
+      ui.hour.replaceChildren(); addOption(ui.hour,'','—'); ui.hour.disabled = true;
+      setMessage('A rodada existe, mas não há produtos disponíveis no backend para esse modelo.', 'error');
+      ui.loading.innerHTML = '<strong>Sem produtos para a rodada</strong>Selecione outra rodada ou aguarde a publicação.';
+      return;
+    }
+    ui.product.disabled = false;
+    const preferred = products.find(p => p.id === 'qpf24') || products.find(p => p.id === 'surface') || products[0];
+    ui.product.value = preferred.id;
+    await configureProduct();
+  } catch (error) {
+    if (myRequest !== requestNumber) return;
+    setMessage('Falha ao carregar produtos: ' + (error.message || error), 'error');
+    ui.loading.innerHTML = '<strong>Falha ao carregar produtos</strong>' + escapeHtml(error.message || error);
+  }
+}
+async function configureProduct() {
+  stopPlayback();
+  const myRequest = ++requestNumber;
+  selectedProduct = products.find(p => p.id === ui.product.value) || null;
+  if (!selectedProduct) return;
+  const values = Array.isArray(selectedProduct.forecast_hours) ? selectedProduct.forecast_hours.map(Number).filter(Number.isFinite) : [];
+  forecastHours = [...new Set(values)].sort((a,b)=>a-b);
+  ui.hour.replaceChildren();
+  for (const hour of forecastHours) addOption(ui.hour,hour,formatHour(hour));
+  ui.hour.disabled = forecastHours.length === 0;
+  if (!forecastHours.length) {
+    ui.loading.innerHTML = '<strong>Sem horários para este produto</strong>Não há quadros publicados para a variável selecionada.';
+    setMessage('Nenhum horário publicado para ' + selectedProduct.name + '.', 'error');
+    return;
+  }
+  frameIndex = 0;
+  syncTimeline();
+  await loadFrame(myRequest);
+}
+async function loadFrame(parentRequest) {
+  if (!selectedProduct || !currentRun || !forecastHours.length) return;
+  const myRequest = ++requestNumber;
+  const hour = selectedHour();
+  const region = ui.region.value || 'south_america';
+  const params = {model:MODEL_ID,run:currentRun,product:selectedProduct.id,region:region,fh:String(hour)};
+  setLoading('Carregando ' + formatHour(hour));
+  ui.download.disabled = true;
+  ui.mapTitle.textContent = (catalogModel && catalogModel.name || MODEL_ID) + ' · ' + (selectedProduct.name || selectedProduct.id);
+  ui.productLabel.textContent = 'Produto: ' + (selectedProduct.name || selectedProduct.id);
+  ui.cycle.textContent = 'Rodada: ' + formatRun(currentRun);
+  try {
+    const availability = await fetchJson('/api/models/frame' + query({...params,format:'json'}),35000);
+    if (myRequest !== requestNumber) return;
+    const response = await fetch(API_BASE + '/api/models/frame' + query(params), {cache:'no-store'});
+    if (!response.ok) {
+      let detail = 'HTTP ' + response.status;
+      try { const body = await response.json(); detail = body.error || body.message || detail; } catch (_) {}
+      throw new Error(detail);
+    }
+    const type = response.headers.get('content-type') || '';
+    if (!type.includes('image/png')) throw new Error('A resposta não é um mapa PNG (' + type + ').');
+    const blob = await response.blob();
+    if (myRequest !== requestNumber) return;
+    if (frameObjectUrl) URL.revokeObjectURL(frameObjectUrl);
+    frameObjectUrl = URL.createObjectURL(blob);
+    ui.image.onload = () => {
+      if (myRequest !== requestNumber) return;
+      ui.image.style.display = 'block';
+      hideLoading();
+      ui.download.disabled = false;
+      setMessage('Mapa carregado · ' + formatHour(hour) + ' · ' + (availability.source || 'backend'), 'good');
+    };
+    ui.image.onerror = () => {
+      if (myRequest !== requestNumber) return;
+      setMessage('O navegador não conseguiu abrir o mapa retornado.', 'error');
+    };
+    ui.image.src = frameObjectUrl;
+    ui.validTime.textContent = formatDate(availability.valid_time,'UTC') + ' UTC';
+    ui.notice.textContent = availability.source || 'dados publicados';
+    syncTimeline();
+  } catch (error) {
+    if (myRequest !== requestNumber) return;
+    setMessage((error && error.message ? error.message : 'Erro de consulta') + ' · ' + formatHour(hour), 'error');
+    ui.loading.innerHTML = '<strong>Produto indisponível neste horário</strong>' + escapeHtml(error && error.message ? error.message : 'A API não encontrou um quadro válido.');
+    ui.loading.style.display = 'block';
+    ui.image.style.display = 'none';
+  }
+}
+function hideLoading() { ui.loading.style.display='none'; }
+function stopPlayback() {
+  if (playbackTimer) clearInterval(playbackTimer);
+  playbackTimer = null; ui.play.textContent = '▶'; ui.play.title = 'Reproduzir previsão';
+}
+function startPlayback() {
+  if (forecastHours.length < 2) return;
+  stopPlayback();
+  ui.play.textContent = 'Ⅱ'; ui.play.title = 'Pausar previsão';
+  playbackTimer = setInterval(() => {
+    if (frameIndex >= forecastHours.length-1) frameIndex = 0; else frameIndex++;
+    syncTimeline(); void loadFrame();
+  },2600);
+}
+ui.run.addEventListener('change',() => { currentRun = ui.run.value; void loadProducts(); });
+ui.product.addEventListener('change',() => void configureProduct());
+ui.region.addEventListener('change',() => void loadFrame());
+ui.hour.addEventListener('change',() => {
+  const position = forecastHours.indexOf(Number(ui.hour.value));
+  if (position >= 0) frameIndex = position;
+  syncTimeline(); void loadFrame();
+});
+ui.timeline.addEventListener('input',() => {
+  frameIndex = Math.max(0,Math.min(forecastHours.length-1,Number(ui.timeline.value)||0));
+  syncTimeline();
+});
+ui.timeline.addEventListener('change',() => void loadFrame());
+ui.previous.addEventListener('click',() => {
+  stopPlayback(); frameIndex = Math.max(0,frameIndex-1); syncTimeline(); void loadFrame();
+});
+ui.next.addEventListener('click',() => {
+  stopPlayback(); frameIndex = Math.min(forecastHours.length-1,frameIndex+1); syncTimeline(); void loadFrame();
+});
+ui.play.addEventListener('click',() => playbackTimer ? stopPlayback() : startPlayback());
+ui.download.addEventListener('click',() => {
+  if (!frameObjectUrl || !selectedProduct) return;
+  const link = document.createElement('a');
+  link.href = frameObjectUrl;
+  link.download = MODEL_ID + '-' + selectedProduct.id + '-' + currentRun + '-' + formatHour(selectedHour()) + '.png';
+  document.body.appendChild(link); link.click(); link.remove();
+});
+ui.zoom.addEventListener('click',() => {
+  zoomed = !zoomed; ui.image.classList.toggle('zoomed',zoomed); ui.zoom.textContent = zoomed ? 'Ajustar mapa' : 'Ampliar mapa';
+});
+loadCatalogAndRuns();
+})();
+</script>
+</body>
+</html>
