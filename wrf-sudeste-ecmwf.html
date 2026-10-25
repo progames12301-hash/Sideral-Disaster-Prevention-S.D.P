@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WRF Sudeste — ECMWF / IFS | Sideral Meteorologia</title>
+    <title>WRF Sudeste — ECMWF IFS | Sideral Meteorologia</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -404,24 +404,24 @@
     </div>
     <div class="metbr-layout" id="uiLayout">
       <aside class="metbr-sidebar" id="uiSidebar">
-        <div class="side-head"><h1>WRF Sudeste — ECMWF / IFS</h1><div class="cycle-line" id="uiCycleLine">Conectando aos dados publicados…</div></div>
+        <div class="side-head"><h1>WRF Sudeste — ECMWF IFS</h1><div class="cycle-line" id="uiCycleLine">Conectando aos dados publicados…</div></div>
         <section class="side-section">
           <h2 class="side-label">Variáveis</h2>
-          <label class="field-label" for="uiVariableA">Variável do boletim</label><select class="select" id="uiVariableA" disabled><option value="reflectivity">Boletim WRF Sudeste — ECMWF / IFS</option></select>
+          <label class="field-label" for="uiVariableA">Variável do boletim</label><select class="select" id="uiVariableA" disabled><option value="reflectivity">Boletim WRF Sudeste — ECMWF IFS</option></select>
           <label class="field-label" for="uiVariableB">Mapa 2</label><select class="select" id="uiVariableB" disabled><option value="precipitation">Precipitação</option></select>
           <label class="field-label" for="uiExportSpeed">Velocidade da animação baixada</label>
           <select class="select" id="uiExportSpeed">
             <option value="slow">Lenta</option><option value="normal">Normal</option>
             <option value="fast">Rápida</option><option value="veryFast">Muito rápida</option>
             <option value="ultraFast" selected>Ultra-rápida</option></select>
-          <p class="help-line">Mapas renderizados no navegador a partir dos dados publicados do WRF Sudeste — ECMWF / IFS. O PNG é exportado em alta resolução.</p>
+          <p class="help-line">Mapas renderizados no navegador a partir dos dados publicados do WRF Sudeste — ECMWF IFS. O PNG é exportado em alta resolução.</p>
           <p class="help-line" id="uiErrorMessage" role="status" aria-live="polite"></p>
         </section>
       </aside>
-      <section class="map-panel" aria-label="Boletins WRF Sudeste — ECMWF / IFS">
+      <section class="map-panel" aria-label="Boletins WRF Sudeste — ECMWF IFS">
         <div class="map-pair">
           <article class="map-card">
-            <header class="map-card-head"><strong id="uiTitleA">Boletim WRF Sudeste — ECMWF / IFS</strong></header>
+            <header class="map-card-head"><strong id="uiTitleA">Boletim WRF Sudeste — ECMWF IFS</strong></header>
             <div class="map-export-row" aria-label="Exportação do mapa 1"><div class="map-actions"><button type="button" id="uiDownloadA">PNG 4K</button><button type="button" id="uiDownloadGifA">GIF</button><button type="button" id="uiDownloadMp4A">MP4</button></div></div>
             <div class="image-wrap"><canvas class="bulletin" id="uiCanvasA" aria-label="Mapa meteorológico METBR, mapa 1"></canvas><div class="image-state" id="uiStateA">Aguardando dados publicados…</div></div>
           </article>
@@ -514,7 +514,7 @@
     <aside class="control-panel">
             <div class="form-group">
                 <label class="form-label">Modelo Meteorológico</label>
-                <select class="form-select" id="modelSelect"><option value="ecmwf_wrf_sudeste" selected>WRF Sudeste — ECMWF / IFS</option></select>
+                <select class="form-select" id="modelSelect"><option value="ecmwf_wrf_sudeste" selected>WRF Sudeste — ECMWF IFS</option></select>
             </div>
 
             <div class="form-group" id="wrfRunGroup">
@@ -536,7 +536,7 @@
                     <option value="temperature">Temperatura</option>
                     <option value="humidity">Umidade</option>
                     <option value="shear">Shear 0-6 km</option>
-                    <optgroup label="WRF Sudeste — ECMWF / IFS — variáveis adicionais">
+                    <optgroup label="WRF Sudeste — ECMWF IFS — variáveis adicionais">
                         <option value="windDirection">Direção do vento (°)</option>
                         <option value="vorticity850">Vorticidade relativa 850 hPa (s⁻¹)</option>
                         <option value="waterVapor">Água precipitável (mm)</option>
@@ -916,17 +916,17 @@
             },
             windDirection: {
                 label: 'Direção do vento', unit: '°', field: 'windDirection',
-                sourceHint: 'WRF Sudeste — ECMWF / IFS', legendMin: 0, legendMax: 360,
+                sourceHint: 'WRF Sudeste — ECMWF IFS', legendMin: 0, legendMax: 360,
                 palette: ['#1d4ed8', '#06b6d4', '#22c55e', '#facc15', '#f97316', '#dc2626', '#7c3aed']
             },
             vorticity850: {
                 label: 'Vorticidade relativa 850 hPa', unit: 's⁻¹', field: 'vorticity850',
-                sourceHint: 'WRF Sudeste — ECMWF / IFS', legendMin: -0.0002, legendMax: 0.0002,
+                sourceHint: 'WRF Sudeste — ECMWF IFS', legendMin: -0.0002, legendMax: 0.0002,
                 palette: ['#2563eb', '#93c5fd', '#f8fafc', '#facc15', '#dc2626']
             },
             waterVapor: {
                 label: 'Água precipitável', unit: 'mm', field: 'waterVapor',
-                sourceHint: 'WRF Sudeste — ECMWF / IFS', legendMin: 0, legendMax: 70,
+                sourceHint: 'WRF Sudeste — ECMWF IFS', legendMin: 0, legendMax: 70,
                 palette: ['#f8fafc', '#bae6fd', '#38bdf8', '#2563eb', '#4f46e5', '#7c3aed']
             }
         };
@@ -970,13 +970,13 @@
         });
 
         Object.assign(VARIABLE_CONFIGS, {
-            lcl_wrf2: { label: 'Nível de condensação (LCL)', unit: 'm', field: 'lcl', sourceHint: 'WRF Sudeste — ECMWF / IFS', legendMin: 0, legendMax: 4000, palette: ['#2563eb','#38bdf8','#22c55e','#facc15','#ef4444'] },
-            surfacePressure: { label: 'Pressão à superfície', unit: 'hPa', field: 'surfacePressure', sourceHint: 'WRF Sudeste — ECMWF / IFS', legendMin: 600, legendMax: 1050, palette: ['#2563eb','#38bdf8','#22c55e','#facc15','#ef4444'] },
-            seaLevelPressure: { label: 'Pressão ao nível do mar', unit: 'hPa', field: 'seaLevelPressure', sourceHint: 'WRF Sudeste — ECMWF / IFS', legendMin: 950, legendMax: 1050, palette: ['#2563eb','#38bdf8','#22c55e','#facc15','#ef4444'] },
-            temperature850: { label: 'Temperatura 850 hPa', unit: '°C', field: 'temperature850', sourceHint: 'WRF Sudeste — ECMWF / IFS', legendMin: -15, legendMax: 30, palette: ['#1d4ed8','#38bdf8','#86efac','#facc15','#fb923c','#ef4444'] },
-            thetaE2m: { label: 'Theta-e à superfície', unit: 'K', field: 'thetaE2m', sourceHint: 'WRF Sudeste — ECMWF / IFS', legendMin: 280, legendMax: 380, palette: ['#2563eb','#38bdf8','#22c55e','#facc15','#ef4444'] },
-            windDirection850: { label: 'Direção do vento 850 hPa', unit: '°', field: 'windDirection850', sourceHint: 'WRF Sudeste — ECMWF / IFS', legendMin: 0, legendMax: 360, palette: ['#1d4ed8','#06b6d4','#22c55e','#facc15','#f97316','#dc2626'] },
-            windSpeed850: { label: 'Velocidade do vento 850 hPa', unit: 'km/h', field: 'windSpeed850', sourceHint: 'WRF Sudeste — ECMWF / IFS', legendMin: 0, legendMax: 120, palette: ['#f8fafc','#93c5fd','#38bdf8','#22c55e','#facc15','#ef4444'] }
+            lcl_wrf2: { label: 'Nível de condensação (LCL)', unit: 'm', field: 'lcl', sourceHint: 'WRF Sudeste — ECMWF IFS', legendMin: 0, legendMax: 4000, palette: ['#2563eb','#38bdf8','#22c55e','#facc15','#ef4444'] },
+            surfacePressure: { label: 'Pressão à superfície', unit: 'hPa', field: 'surfacePressure', sourceHint: 'WRF Sudeste — ECMWF IFS', legendMin: 600, legendMax: 1050, palette: ['#2563eb','#38bdf8','#22c55e','#facc15','#ef4444'] },
+            seaLevelPressure: { label: 'Pressão ao nível do mar', unit: 'hPa', field: 'seaLevelPressure', sourceHint: 'WRF Sudeste — ECMWF IFS', legendMin: 950, legendMax: 1050, palette: ['#2563eb','#38bdf8','#22c55e','#facc15','#ef4444'] },
+            temperature850: { label: 'Temperatura 850 hPa', unit: '°C', field: 'temperature850', sourceHint: 'WRF Sudeste — ECMWF IFS', legendMin: -15, legendMax: 30, palette: ['#1d4ed8','#38bdf8','#86efac','#facc15','#fb923c','#ef4444'] },
+            thetaE2m: { label: 'Theta-e à superfície', unit: 'K', field: 'thetaE2m', sourceHint: 'WRF Sudeste — ECMWF IFS', legendMin: 280, legendMax: 380, palette: ['#2563eb','#38bdf8','#22c55e','#facc15','#ef4444'] },
+            windDirection850: { label: 'Direção do vento 850 hPa', unit: '°', field: 'windDirection850', sourceHint: 'WRF Sudeste — ECMWF IFS', legendMin: 0, legendMax: 360, palette: ['#1d4ed8','#06b6d4','#22c55e','#facc15','#f97316','#dc2626'] },
+            windSpeed850: { label: 'Velocidade do vento 850 hPa', unit: 'km/h', field: 'windSpeed850', sourceHint: 'WRF Sudeste — ECMWF IFS', legendMin: 0, legendMax: 120, palette: ['#f8fafc','#93c5fd','#38bdf8','#22c55e','#facc15','#ef4444'] }
         });
 
         const WRF2_VARIABLES = new Set(Object.keys(VARIABLE_CONFIGS).filter(key => key.endsWith('_wrf2')));
@@ -1618,7 +1618,7 @@
                     }
 
                     if (!frames.length) throw new Error('METBR: nenhum frame válido no metadata');
-                    const result = { status: true, model: 'WRF Sudeste — ECMWF / IFS', resolutionKm: 4, frames, availableFrames: frames, frameCount: frames.length, initTime: data.initTime || null, grid: data.grid || { nx: 0, ny: 0 }, _modelName: 'metbr_wrf', _sourceModelKey: 'metbr' };
+                    const result = { status: true, model: 'WRF Sudeste — ECMWF IFS', resolutionKm: 4, frames, availableFrames: frames, frameCount: frames.length, initTime: data.initTime || null, grid: data.grid || { nx: 0, ny: 0 }, _modelName: 'metbr_wrf', _sourceModelKey: 'metbr' };
                     metbrMetadataCache = result;
                     return result;
                 } catch (error) { throw error; } finally { metbrMetadataPromise = null; }
@@ -1634,7 +1634,7 @@
                     const response = await fetch(`${METBR_JSON_BASE}/metbr_wrf_4km.json?ts=${Date.now()}`, { cache: 'no-store' });
                     if (!response.ok) throw new Error(`METBR WRF 4km JSON HTTP ${response.status}`);
                     const data = await response.json();
-                    if (!data || !Array.isArray(data.frames) || !data.frames.length) throw new Error('WRF Sudeste — ECMWF / IFS: JSON inválido ou sem frames');
+                    if (!data || !Array.isArray(data.frames) || !data.frames.length) throw new Error('WRF Sudeste — ECMWF IFS: JSON inválido ou sem frames');
                     metbrWrfDataCache = data;
                     return data;
                 } catch (error) { throw error; } finally { metbrWrfDataPromise = null; }
@@ -2181,7 +2181,7 @@
         };
 
         function publishedModelLabel(modelKey, modelName = currentModel) {
-            if (modelName === 'metbr_wrf') return 'WRF Sudeste — ECMWF / IFS';
+            if (modelName === 'metbr_wrf') return 'WRF Sudeste — ECMWF IFS';
             if (modelName === 'brasil_wrf_21km') return 'WRF Sideral Brasil 21 km';
             const domain = domainKeyForModel(modelName);
             const domainLabel = domain === 'sudeste' ? 'Sudeste' : domain === 'brasil' ? 'Brasil' : 'Sul';
@@ -2225,19 +2225,19 @@
                     const status = await fetchMetbrMetadata();
                     if (requestedModel !== currentModel) return null;
                     if (!status || !Array.isArray(status.frames) || !status.frames.length) {
-                        throw new Error('WRF Sudeste — ECMWF / IFS: nenhuma rodada disponível no JSON publicado.');
+                        throw new Error('WRF Sudeste — ECMWF IFS: nenhuma rodada disponível no JSON publicado.');
                     }
                     updateTimelineUi({ ...status, availableFrames: status.frames });
                     currentFrameMeta = { ...status, availableFrames: status.frames };
                     clampTimelineToPublishedFrames();
                     document.getElementById('statusText').textContent =
-                        `WRF Sudeste — ECMWF / IFS · ${status.frameCount} horários · REFL_10CM nativo`;
+                        `WRF Sudeste — ECMWF IFS · ${status.frameCount} horários · REFL_10CM nativo`;
                     return { ...status, status: 'ok' };
                 } catch (error) {
                     if (requestedModel !== currentModel) return null;
                     if (!options.silent) {
                         document.getElementById('statusText').textContent =
-                            `WRF Sudeste — ECMWF / IFS: ${error.message}`;
+                            `WRF Sudeste — ECMWF IFS: ${error.message}`;
                     }
                     return null;
                 }
@@ -2690,7 +2690,7 @@
         // Rótulo do modelo no boletim: só o metbr_wrf é METBR.
         // Sul 7 km, Sudeste 7 km e Brasil 21 km são WRF Sideral.
         function bulletinModelLabel(modelName = currentModel) {
-            if (modelName === 'metbr_wrf') return 'WRF Sudeste — ECMWF / IFS';
+            if (modelName === 'metbr_wrf') return 'WRF Sudeste — ECMWF IFS';
             const input = { gfs: 'GFS', icon: 'ICON', ecmwf: 'ECMWF' }[backendModelKey(modelName)] || 'GFS';
             if (isCimModel(modelName)) return `CIM WRF 8 km · ${input}`;
             if (modelName === 'brasil_wrf_21km') return 'WRF Sideral Brasil 21 km';
@@ -4539,7 +4539,7 @@
     if (target !== source) {
       source.id = target.id;
       source.className = target.className || 'bulletin';
-      source.setAttribute('aria-label', target.getAttribute('aria-label') || 'Boletim WRF Sudeste — ECMWF / IFS');
+      source.setAttribute('aria-label', target.getAttribute('aria-label') || 'Boletim WRF Sudeste — ECMWF IFS');
       source.dataset.ready = 'false';
       target.replaceWith(source);
       target = source;
@@ -4664,7 +4664,7 @@
     const init = currentFrameMeta?.initTime ? new Date(currentFrameMeta.initTime) : null;
     UI.cycle.textContent = init && Number.isFinite(init.getTime())
       ? `Rodada ${init.toLocaleString('pt-BR', {timeZone:'UTC', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false})} UTC`
-      : 'WRF Sudeste — ECMWF / IFS';
+      : 'WRF Sudeste — ECMWF IFS';
     if (syncEngine) {
       const slider = byId('timeSlider');
       slider.value = String(activeFrame);
@@ -4889,20 +4889,20 @@
         ready = true; activeFrame = 0;
         populateVariables(); updateTimelineUi();
         UI.selectA.disabled = false; UI.selectB.disabled = false;
-        statusText(`WRF Sudeste — ECMWF / IFS · ${frames.length} horários · dados publicados`);
+        statusText(`WRF Sudeste — ECMWF IFS · ${frames.length} horários · dados publicados`);
         // As fronteiras são decorativas; não bloqueiam o primeiro boletim.
         // Carregamos em segundo plano para enriquecer as próximas renderizações.
         setTimeout(() => void ensureBoundaries().then(() => { if (ready) requestRender(); }), 1200);
         requestRender(); return;
       }
       const engineStatus = byId('statusText')?.textContent || '';
-      if (/WRF Sudeste — ECMWF / IFS:|dados indisponíveis|HTTP 4\d\d|sem arquivos/i.test(engineStatus)) {
+      if (/WRF Sudeste — ECMWF IFS:|dados indisponíveis|HTTP 4\d\d|sem arquivos/i.test(engineStatus)) {
         UI.cycle.textContent = engineStatus;
       }
       await wait(250);
     }
-    UI.cycle.textContent = 'Dados WRF Sudeste — ECMWF / IFS indisponíveis';
-    showSideState('A', 'Não foi possível carregar os metadados de WRF Sudeste — ECMWF / IFS.', true);
+    UI.cycle.textContent = 'Dados WRF Sudeste — ECMWF IFS indisponíveis';
+    showSideState('A', 'Não foi possível carregar os metadados de WRF Sudeste — ECMWF IFS.', true);
     showSideState('B', 'Verifique metadata.json na branch de dados configurada para este modelo.', true);
     statusText('Falha ao carregar os dados METBR publicados.');
   }
@@ -4911,7 +4911,7 @@
     // Esta página é exclusivamente METBR, mesmo que o navegador tenha outro modelo salvo.
     currentModel = 'ecmwf_wrf_sudeste';
     const modelSelect = byId('modelSelect');
-    modelSelect.replaceChildren(new Option('WRF Sudeste — ECMWF / IFS','metbr_wrf',true,true));
+    modelSelect.replaceChildren(new Option('WRF Sudeste — ECMWF IFS','metbr_wrf',true,true));
     modelSelect.value = 'metbr_wrf'; currentVariable = 'reflectivity';
     byId('variableSelect').value = 'reflectivity'; selectedWrfRun = 'latest';
     window.__metbrPreviewMode = true; window.__metbrForceFullResolution = false;
